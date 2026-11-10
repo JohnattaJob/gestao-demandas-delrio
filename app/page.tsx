@@ -933,8 +933,8 @@ export default function Home() {
                 <Stat icon={<ArrowUpRight/>} label="Entradas" value={stockMovementSummary.entries} tone="green"/>
                 <Stat icon={<Activity/>} label="SaÃ­das" value={stockMovementSummary.exits} tone="blue"/>
                 <Stat icon={<Layers/>} label="Reservas" value={stockMovementSummary.reservations} tone="violet"/>
-                <Stat icon={<RefreshCw/>} label="Cancelamentos de reserva" value={stockMovementSummary.reservationCancellations} tone="orange"/>
-                <Stat icon={<History/>} label="Ajustes" value={stockMovementSummary.adjustments} tone="gray"/>
+                <Stat icon={<RefreshCw/>} label="Cancelamentos de reserva" value={stockMovementSummary.reservationCancellations} tone="amber"/>
+                <Stat icon={<History/>} label="Ajustes" value={stockMovementSummary.adjustments} tone="blue"/>
               </div>
             </div>
           </>}
