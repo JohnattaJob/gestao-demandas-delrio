@@ -385,9 +385,17 @@ export default function Home() {
     const rawDate = reportDateMode === "created" ? task.created : reportDateMode === "due" ? task.due : task.completedAt?.slice(0,10) || "";
     return !!rawDate && rawDate >= start && rawDate <= end;
   }),[tasks,reportAreaFilter,reportOwnerFilter,reportStatusFilter,reportPeriod,reportDateRange,reportDateMode]);
+  const reportToday = (() => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })();
+  const reportReceived = reportTasks.filter(t=>t.status==="Recebida").length;
+  const reportAnalysis = reportTasks.filter(t=>t.status==="Em anÃ¡lise").length;
+  const reportAwaitingApproval = reportTasks.filter(t=>t.status==="Aguardando aprovaÃ§Ã£o").length;
+  const reportExecuting = reportTasks.filter(t=>t.status==="Em execuÃ§Ã£o").length;
   const reportDone = reportTasks.filter(t=>t.status==="ConcluÃ­da").length;
-  const reportInProgress = reportTasks.filter(t=>t.status==="Em execuÃ§Ã£o"||t.status==="Em anÃ¡lise"||t.status==="Aguardando aprovaÃ§Ã£o").length;
-  const reportLate = reportTasks.filter(t=>t.status!=="ConcluÃ­da"&&t.status!=="Cancelada"&&t.due&&new Date(t.due+"T23:59:00")<new Date()).length;
+  const reportInProgress = reportAnalysis + reportAwaitingApproval + reportExecuting;
+  const reportLate = reportTasks.filter(t=>t.status!=="ConcluÃ­da"&&t.status!=="Cancelada"&&t.due&&t.due<reportToday).length;
+  const reportOpenBase = reportTasks.filter(t=>t.status!=="ConcluÃ­da"&&t.status!=="Cancelada").length;
+  const reportOverdueRate = reportOpenBase ? Math.round(reportLate/reportOpenBase*100) : 0;
+  const reportCancelled = reportTasks.filter(t=>t.status==="Cancelada").length;
   const reportCompletionBase = reportTasks.filter(t=>t.status!=="Cancelada").length;
   const reportCompletionRate = reportCompletionBase ? Math.round(reportDone/reportCompletionBase*100) : 0;
   const reportByArea = areaNames.map(name=>({name,total:reportTasks.filter(t=>t.area===name).length})).filter(x=>x.total>0).sort((a,b)=>b.total-a.total);
@@ -900,6 +908,7 @@ export default function Home() {
         {active==="RelatÃ³rios" && <>
           <div className="pageHeading"><div><p className="eyebrow">ANÃLISE GERENCIAL</p><h1>RelatÃ³rios</h1><p className="sub">Acompanhe resultados, produtividade e distribuiÃ§Ã£o das demandas.</p></div></div>
           <style>{`
+            .reportKpiGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-top:18px}
             .reportFilterCard{padding:22px 24px;margin-bottom:18px;border:1px solid #e7e8ef;background:linear-gradient(135deg,#fff 0%,#fcfbff 100%);box-shadow:0 5px 18px rgba(31,24,55,.035)}
             .reportFilterTop{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:20px}
             .reportFilterTitle{display:flex;align-items:center;gap:11px}.reportFilterIcon{width:38px;height:38px;display:grid;place-items:center;border-radius:12px;background:#f2eaff;color:#7a1bd8;flex:none}
@@ -914,6 +923,7 @@ export default function Home() {
             .reportPanel{padding:22px 24px}.reportPanelHead{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:18px}.reportPanelHead h3{margin:0 0 4px;font-size:15px}.reportPanelHead p{margin:0;color:#858397;font-size:12px}
             .reportBars{display:grid;gap:15px}.reportBarRow>div:first-child{display:flex;justify-content:space-between;gap:12px;margin-bottom:7px;color:#555267;font-size:12px}.reportBarTrack{height:9px;background:#f0edf5;border-radius:99px;overflow:hidden}.reportBarTrack i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#9b5cdb,#7624c7)}
             .reportRate{display:flex;align-items:center;gap:16px}.reportRate strong{font-size:30px;color:#272235}.reportRate span{font-size:12px;color:#858397}
+            @media(max-width:900px){.reportKpiGrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
             @media(max-width:600px){.reportFilterCard,.reportPanel{padding:18px}.reportCustomDates{grid-template-columns:1fr}.reportPeriodButton{flex:1 1 calc(50% - 7px)}}
           `}</style>
           <section className="panel reportFilterCard">
@@ -930,14 +940,14 @@ export default function Home() {
             {reportDateMode==="completed"&&<p className="dashFilterNote">A anÃ¡lise por conclusÃ£o utiliza a data registrada quando a solicitaÃ§Ã£o foi concluÃ­da. SolicitaÃ§Ãµes concluÃ­das antes da ativaÃ§Ã£o desse registro podem nÃ£o aparecer nesse filtro.</p>}
             <div className="reportFilterBottom"><span className="reportSummary"><CalendarDays size={14}/> CritÃ©rio: <strong>{reportDateLabel}</strong></span><span className="reportSummary">{reportTasks.length} solicitaÃ§Ã£o(Ãµes) no resultado</span></div>
           </section>
-          <div className="stats"><Stat icon={<ClipboardList/>} label="Total de solicitaÃ§Ãµes" value={reportTasks.length} tone="blue"/><Stat icon={<CheckCircle2/>} label="ConcluÃ­das" value={reportDone} tone="green"/><Stat icon={<Clock3/>} label="Em andamento" value={reportInProgress} tone="violet"/><Stat icon={<AlertTriangle/>} label="Atrasadas" value={reportLate} tone="red"/></div>
+          <div className="reportKpiGrid"><Stat icon={<ClipboardList/>} label="Total de solicitaÃ§Ãµes" value={reportTasks.length} tone="blue"/><Stat icon={<Clock3/>} label="Recebidas" value={reportReceived} tone="blue"/><Stat icon={<Activity/>} label="Em anÃ¡lise" value={reportAnalysis} tone="violet"/><Stat icon={<Clock3/>} label="Aguardando aprovaÃ§Ã£o" value={reportAwaitingApproval} tone="violet"/><Stat icon={<Activity/>} label="Em execuÃ§Ã£o" value={reportExecuting} tone="violet"/><Stat icon={<CheckCircle2/>} label="ConcluÃ­das" value={reportDone} tone="green"/><Stat icon={<X/>} label="Canceladas" value={reportCancelled} tone="red"/><Stat icon={<AlertTriangle/>} label="Atrasadas" value={reportLate} tone="red"/></div>
           <div className="gridMain" style={{marginTop:18}}>
             <section className="panel reportPanel"><div className="reportPanelHead"><div><h3>DistribuiÃ§Ã£o por status</h3><p>Volume de solicitaÃ§Ãµes em cada etapa</p></div></div><div className="reportBars">{(["Recebida","Em anÃ¡lise","Aguardando aprovaÃ§Ã£o","Em execuÃ§Ã£o","ConcluÃ­da","Cancelada"] as Status[]).map(status=>{const count=reportTasks.filter(t=>t.status===status).length;return <div className="reportBarRow" key={status}><div><span>{status}</span><b>{count}</b></div><div className="reportBarTrack"><i style={{width:`${reportTasks.length?count/reportTasks.length*100:0}%`}}/></div></div>})}</div></section>
             <section className="panel reportPanel"><div className="reportPanelHead"><div><h3>DistribuiÃ§Ã£o por Ã¡rea</h3><p>ParticipaÃ§Ã£o de cada Ã¡rea no volume total</p></div></div>{!reportByArea.length?<div className="emptyTable">NÃ£o hÃ¡ solicitaÃ§Ãµes no perÃ­odo selecionado.</div>:<div className="reportBars">{reportByArea.map(item=><div className="reportBarRow" key={item.name}><div><span>{item.name}</span><b>{item.total}</b></div><div className="reportBarTrack"><i style={{width:`${reportTasks.length?item.total/reportTasks.length*100:0}%`}}/></div></div>)}</div>}</section>
           </div>
           <div className="gridMain" style={{marginTop:18}}>
             <section className="panel reportPanel"><div className="reportPanelHead"><div><h3>Desempenho da equipe</h3><p>SolicitaÃ§Ãµes atribuÃ­das por responsÃ¡vel</p></div></div>{!reportByOwner.length?<div className="emptyTable">NÃ£o hÃ¡ solicitaÃ§Ãµes atribuÃ­das no perÃ­odo.</div>:<div className="tableWrap"><table><thead><tr><th>ResponsÃ¡vel</th><th>Total</th><th>ConcluÃ­das</th><th>Em andamento</th><th>Atrasadas</th></tr></thead><tbody>{reportByOwner.map(person=><tr key={person.id}><td><b>{person.name}</b></td><td>{person.total}</td><td>{person.done}</td><td>{person.inProgress}</td><td>{person.late}</td></tr>)}</tbody></table></div>}</section>
-            <section className="panel reportPanel"><div className="reportPanelHead"><div><h3>Taxa de conclusÃ£o</h3><p>Percentual de demandas concluÃ­das no resultado filtrado</p></div></div><div className="reportRate"><strong>{reportCompletionRate}%</strong><span>{reportDone} de {reportCompletionBase} solicitaÃ§Ãµes vÃ¡lidas concluÃ­das</span></div><div className="reportBarTrack" style={{marginTop:16,height:12}}><i style={{display:"block",height:"100%",width:`${reportCompletionRate}%`,borderRadius:99,background:"linear-gradient(90deg,#9b5cdb,#7624c7)"}}/></div></section>
+            <section className="panel reportPanel"><div className="reportPanelHead"><div><h3>Taxa de conclusÃ£o</h3><p>Percentual de demandas concluÃ­das no resultado filtrado</p></div></div><div className="reportRate"><strong>{reportCompletionRate}%</strong><span>{reportDone} de {reportCompletionBase} solicitaÃ§Ãµes vÃ¡lidas concluÃ­das</span></div><div className="reportBarTrack" style={{marginTop:16,height:12}}><i style={{display:"block",height:"100%",width:`${reportCompletionRate}%`,borderRadius:99,background:"linear-gradient(90deg,#9b5cdb,#7624c7)"}}/></div><div style={{marginTop:22,paddingTop:18,borderTop:"1px solid #f0edf4"}}><div className="reportPanelHead"><div><h3>SolicitaÃ§Ãµes em atraso</h3><p>{reportLate} de {reportOpenBase} solicitaÃ§Ãµes abertas estÃ£o com prazo vencido</p></div><strong style={{fontSize:24,color:"#b42318"}}>{reportOverdueRate}%</strong></div><div className="reportBarTrack" style={{height:10}}><i style={{display:"block",height:"100%",width:`${reportOverdueRate}%`,borderRadius:99,background:"#d92d20"}}/></div></div></section>
           </div>
           <section className="panel reportPanel" style={{marginTop:18}}><div className="reportPanelHead"><div><h3>Detalhamento das solicitaÃ§Ãµes</h3><p>Consulte os registros que compÃµem os indicadores acima.</p></div></div><TaskTable tasks={[...reportTasks].sort((a,b)=>b.created.localeCompare(a.created))} onSelect={setSelected}/></section>
         </>}
