@@ -509,6 +509,21 @@ export default function Home() {
       adjustments: count("ajuste")
     };
   },[stockMovements]);
+  const stockAlerts = useMemo(() => stockMaterials
+    .map(material => {
+      const reserved = reservedByMaterial[material.id] || 0;
+      const available = Number(material.quantity) - reserved;
+      const minimum = Number(material.minimum_quantity);
+      if (available <= 0) return { material, reserved, available, minimum, level: "critical" as const, label: "Sem saldo disponível" };
+      if (available < minimum) return { material, reserved, available, minimum, level: "warning" as const, label: "Abaixo do mínimo" };
+      if (available === minimum) return { material, reserved, available, minimum, level: "limit" as const, label: "No limite mínimo" };
+      return null;
+    })
+    .filter((alert): alert is NonNullable<typeof alert> => alert !== null)
+    .sort((a,b) => {
+      const priority = { critical: 0, warning: 1, limit: 2 };
+      return priority[a.level] - priority[b.level] || a.material.name.localeCompare(b.material.name, "pt-BR");
+    }),[stockMaterials,reservedByMaterial]);
   const myOrderAreas = profile?.role === "admin" ? areas : areas.filter(area => (profile?.area_ids||[]).includes(area.id) || profile?.area_id === area.id);
   const orderAreaName = (id:string) => areas.find(area=>area.id===id)?.name || "Ãrea nÃ£o identificada";
   const orderRequesterName = (id:string) => members.find(member=>member.id===id)?.full_name || (id===profile?.id?profile.full_name:"Solicitante");
@@ -936,6 +951,32 @@ export default function Home() {
                 <Stat icon={<RefreshCw/>} label="Cancelamentos de reserva" value={stockMovementSummary.reservationCancellations} tone="amber"/>
                 <Stat icon={<History/>} label="Ajustes" value={stockMovementSummary.adjustments} tone="blue"/>
               </div>
+            </div>
+            <div className="panel" style={{marginTop:18}}>
+              <div className="panelHead">
+                <div><h3>Alertas de estoque</h3><p>Materiais sem saldo disponível ou com saldo no limite/abaixo do estoque mínimo.</p></div>
+                <span className="muted">{stockAlerts.length} alerta(s)</span>
+              </div>
+              {stockAlerts.length === 0 ? <div className="emptyTable">Nenhum alerta. Todos os materiais estão acima do estoque mínimo.</div> : (
+                <div style={{display:"grid",gap:10}}>
+                  {stockAlerts.map(alert => {
+                    const color = alert.level === "critical" ? "#b42318" : alert.level === "warning" ? "#b54708" : "#7a5b00";
+                    const background = alert.level === "critical" ? "#fff1f0" : alert.level === "warning" ? "#fff7ed" : "#fffbeb";
+                    return <div key={alert.material.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:16,flexWrap:"wrap",padding:"13px 15px",border:"1px solid #eaecf0",borderRadius:10}}>
+                      <div style={{display:"flex",alignItems:"center",gap:10,minWidth:220,flex:"1 1 240px"}}>
+                        <span style={{width:9,height:9,borderRadius:99,background:color,flexShrink:0}}/>
+                        <div><b style={{display:"block",fontSize:14}}>{alert.material.name}</b><span className="muted" style={{fontSize:12}}>{alert.material.sku || "Sem código"}</span></div>
+                      </div>
+                      <span style={{fontSize:12,fontWeight:600,color,background,padding:"6px 9px",borderRadius:20}}>{alert.label}</span>
+                      <div style={{display:"flex",gap:18,flexWrap:"wrap",fontSize:12,color:"#475467"}}>
+                        <span>Disponível: <b>{alert.available.toLocaleString("pt-BR",{maximumFractionDigits:2})} {alert.material.unit}</b></span>
+                        <span>Reservado: <b>{alert.reserved.toLocaleString("pt-BR",{maximumFractionDigits:2})} {alert.material.unit}</b></span>
+                        <span>Mínimo: <b>{alert.minimum.toLocaleString("pt-BR",{maximumFractionDigits:2})} {alert.material.unit}</b></span>
+                      </div>
+                    </div>;
+                  })}
+                </div>
+              )}
             </div>
           </>}
           <div className="panel">
