@@ -4,7 +4,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import {
   Activity, BarChart3, CalendarDays, CheckCircle2, ChevronDown, ClipboardList,
-  Clock3, LayoutDashboard, LogOut, Menu, Package, Plus, Search, Settings,
+  Clock3, Download, LayoutDashboard, LogOut, Menu, Package, Plus, Search, Settings,
   Users, X, AlertTriangle, Layers, ArrowUpRight, RefreshCw, ClipboardCheck, PackageCheck, History
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
@@ -404,6 +404,59 @@ export default function Home() {
     return [...grouped.values()].sort((a,b)=>b.total-a.total||a.name.localeCompare(b.name,"pt-BR"));
   })();
   const reportDateLabel = reportDateMode==="created"?"data de abertura":reportDateMode==="completed"?"data de conclusÃ£o":"data do prazo";
+  const exportReports = () => {
+    const csvCell = (value: unknown) => `"${String(value ?? "").replace(/"/g, '""')}"`;
+    const periodLabel = ({all:"Todo o período",month:"Este mês","30":"Últimos 30 dias","90":"Últimos 90 dias",year:"Este ano",custom:"Personalizado"} as Record<string,string>)[reportPeriod] || reportPeriod;
+    const formatDate = (value:string) => value ? new Date(value+"T12:00:00").toLocaleDateString("pt-BR") : "—";
+    const rows: string[][] = [
+      ["RELATÓRIO GERENCIAL"],
+      ["Critério da data",reportDateLabel],
+      ["Período",periodLabel],
+      ["Data inicial",reportPeriod==="custom"?formatDate(reportStartDate):"—"],
+      ["Data final",reportPeriod==="custom"?formatDate(reportEndDate):"—"],
+      ["Área",reportAreaFilter==="Todas"?"Todas as áreas":areas.find(area=>area.id===reportAreaFilter)?.name||"Área selecionada"],
+      ["Responsável",reportOwnerFilter==="Todos"?"Todos os colaboradores":reportOwnerFilter==="Sem responsável"?"Sem responsável":requestUsers.find(([id])=>id===reportOwnerFilter)?.[1]||"Responsável selecionado"],
+      ["Status",reportStatusFilter],
+      [],
+      ["INDICADORES"],
+      ["Indicador","Quantidade / percentual"],
+      ["Total de solicitações",String(reportTasks.length)],
+      ["Recebidas",String(reportReceived)],
+      ["Em análise",String(reportAnalysis)],
+      ["Aguardando aprovação",String(reportAwaitingApproval)],
+      ["Em execução",String(reportExecuting)],
+      ["Concluídas",String(reportDone)],
+      ["Canceladas",String(reportCancelled)],
+      ["Atrasadas",String(reportLate)],
+      ["Taxa de conclusão",reportCompletionRate+"%"],
+      ["Taxa de atraso",reportOverdueRate+"%"],
+      [],
+      ["DISTRIBUIÇÃO POR ÁREA"],
+      ["Área","Solicitações"],
+      ...reportByArea.map(item=>[item.name,String(item.total)]),
+      [],
+      ["DESEMPENHO DA EQUIPE"],
+      ["Responsável","Total","Concluídas","Em andamento","Atrasadas"],
+      ...reportByOwner.map(person=>[person.name,String(person.total),String(person.done),String(person.inProgress),String(person.late)]),
+      [],
+      ["DETALHAMENTO DAS SOLICITAÇÕES"],
+      ["Protocolo","Solicitação","Área","Responsável","Solicitante","Prioridade","Status","Data de abertura","Prazo","Data de conclusão"],
+      ...[...reportTasks].sort((a,b)=>b.created.localeCompare(a.created)).map(task=>[
+        String(task.protocol),task.title,task.area,task.owner,task.requester,task.priority,task.status,
+        formatDate(task.created),formatDate(task.due),formatDate(task.completedAt?.slice(0,10)||"")
+      ])
+    ];
+    const csv = "\uFEFF" + rows.map(row=>row.map(csvCell).join(";")).join("\r\n");
+    const blob = new Blob([csv],{type:"text/csv;charset=utf-8;"});
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `relatorio-gerencial-${reportToday}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
   const scheduleToday = (() => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })();
   const scheduleTasks = useMemo(() => tasks.filter(task => {
     if (scheduleOwnerFilter === "Sem responsÃ¡vel" && task.ownerId) return false;
@@ -905,7 +958,7 @@ export default function Home() {
           </div>}
         </>}
         {active==="RelatÃ³rios" && <>
-          <div className="pageHeading"><div><p className="eyebrow">ANÃLISE GERENCIAL</p><h1>RelatÃ³rios</h1><p className="sub">Acompanhe resultados, produtividade e distribuiÃ§Ã£o das demandas.</p></div></div>
+          <div className="pageHeading" style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:16,flexWrap:"wrap"}}><div><p className="eyebrow">ANÃLISE GERENCIAL</p><h1>RelatÃ³rios</h1><p className="sub">Acompanhe resultados, produtividade e distribuiÃ§Ã£o das demandas.</p></div><button type="button" className="secondary" onClick={exportReports}><Download size={16}/> Exportar relatório</button></div>
           <style>{`
             .reportKpiGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-top:18px}
             .reportFilterCard{padding:22px 24px;margin-bottom:18px;border:1px solid #e7e8ef;background:linear-gradient(135deg,#fff 0%,#fcfbff 100%);box-shadow:0 5px 18px rgba(31,24,55,.035)}
