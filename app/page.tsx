@@ -107,6 +107,10 @@ export default function Home() {
   const [showNewMaterial,setShowNewMaterial] = useState(false);
   const [showStockMovement,setShowStockMovement] = useState(false);
   const [stockSearch,setStockSearch] = useState("");
+  const [stockReportMaterial,setStockReportMaterial] = useState("Todos");
+  const [stockReportType,setStockReportType] = useState("Todos");
+  const [stockReportStart,setStockReportStart] = useState("");
+  const [stockReportEnd,setStockReportEnd] = useState("");
   const [materialForm,setMaterialForm] = useState({name:"",sku:"",description:"",unit:"un",minimum_quantity:"0"});
   const [movementForm,setMovementForm] = useState({material_id:"",movement_type:"entrada" as StockMovement["movement_type"],quantity:"",request_id:"",notes:""});
   const [materialOrders,setMaterialOrders] = useState<MaterialOrder[]>([]);
@@ -509,6 +513,24 @@ export default function Home() {
       adjustments: count("ajuste")
     };
   },[stockMovements]);
+  const filteredStockMovements = useMemo(() => stockMovements.filter(movement => {
+    if (stockReportMaterial !== "Todos" && movement.material_id !== stockReportMaterial) return false;
+    if (stockReportType !== "Todos" && movement.movement_type !== stockReportType) return false;
+    const movementDate = movement.created_at.slice(0,10);
+    if (stockReportStart && movementDate < stockReportStart) return false;
+    if (stockReportEnd && movementDate > stockReportEnd) return false;
+    return true;
+  }),[stockMovements,stockReportMaterial,stockReportType,stockReportStart,stockReportEnd]);
+  const stockReportSummary = useMemo(() => {
+    const count = (type: StockMovement["movement_type"]) => filteredStockMovements.filter(movement => movement.movement_type === type).length;
+    return {
+      total: filteredStockMovements.length,
+      entries: count("entrada"),
+      exits: count("saida"),
+      adjustments: count("ajuste"),
+      reservations: count("reserva") + count("cancelamento_reserva")
+    };
+  },[filteredStockMovements]);
   const stockAlerts = useMemo(() => stockMaterials
     .map(material => {
       const reserved = reservedByMaterial[material.id] || 0;
@@ -682,6 +704,33 @@ export default function Home() {
       }
     }
     setStockSaving(false);
+  }
+
+  function exportStockMovements() {
+    const labels:Record<string,string> = {entrada:"Entrada",saida:"Saída",reserva:"Reserva",cancelamento_reserva:"Cancelamento de reserva",ajuste:"Ajuste"};
+    const rows = filteredStockMovements.map(movement => {
+      const material = stockMaterials.find(item => item.id === movement.material_id);
+      const request = tasks.find(item => item.id === movement.request_id);
+      return [
+        new Date(movement.created_at).toLocaleString("pt-BR"),
+        material?.name || "Material não encontrado",
+        material?.sku || "",
+        labels[movement.movement_type] || movement.movement_type,
+        Number(movement.quantity).toLocaleString("pt-BR",{maximumFractionDigits:2}) + " " + (material?.unit || ""),
+        request ? "Solicitação #" + request.protocol : movement.material_order_id ? "Pedido de materiais" : "Movimentação manual",
+        movement.notes || ""
+      ];
+    });
+    const csvCell = (value:string) => '"' + String(value).replace(/"/g,'""') + '"';
+    const csv = [["Data","Material","SKU","Tipo","Quantidade","Origem","Observações"],...rows]
+      .map(row => row.map(csvCell).join(";")).join("\r\n");
+    const blob = new Blob(["\uFEFF",csv],{type:"text/csv;charset=utf-8;"});
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "relatorio-movimentacoes-estoque.csv";
+    link.click();
+    URL.revokeObjectURL(url);
   }
 
   async function saveMember() {
@@ -1004,24 +1053,44 @@ export default function Home() {
               </tbody></table></div>}
           </div>
           {canManageStock && <div className="panel" style={{marginTop:18}}>
-            <div className="panelHead"><div><h3>HistÃ³rico de movimentaÃ§Ãµes</h3><p>Registros preservados no banco de dados, do mais recente ao mais antigo.</p></div><span className="muted">{stockMovements.length} registro(s)</span></div>
-            {!stockMovements.length ? <div className="emptyTable">Nenhuma movimentaÃ§Ã£o registrada.</div> :
-              <div className="tableWrap"><table><thead><tr><th>Data</th><th>Material</th><th>Tipo</th><th>Quantidade</th><th>Origem</th><th>ObservaÃ§Ãµes</th></tr></thead><tbody>
-                {stockMovements.map(m=>{
+            <div className="panelHead">
+              <div><h3>Relatório de movimentações</h3><p>Consulte e exporte entradas, saídas, ajustes e movimentações de reservas.</p></div>
+              <button className="secondary" onClick={exportStockMovements} disabled={!filteredStockMovements.length}><Download size={15}/> Exportar CSV</button>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:14,marginBottom:18}}>
+              <div><label className="reportFieldLabel" htmlFor="stock-report-material">Material</label><select id="stock-report-material" className="reportSelect" value={stockReportMaterial} onChange={e=>setStockReportMaterial(e.target.value)}><option value="Todos">Todos os materiais</option>{stockMaterials.map(material=><option key={material.id} value={material.id}>{material.name}</option>)}</select></div>
+              <div><label className="reportFieldLabel" htmlFor="stock-report-type">Tipo de movimentação</label><select id="stock-report-type" className="reportSelect" value={stockReportType} onChange={e=>setStockReportType(e.target.value)}><option value="Todos">Todos os tipos</option><option value="entrada">Entrada</option><option value="saida">Saída</option><option value="ajuste">Ajuste</option><option value="reserva">Reserva</option><option value="cancelamento_reserva">Cancelamento de reserva</option></select></div>
+              <div><label className="reportFieldLabel" htmlFor="stock-report-start">Data inicial</label><input id="stock-report-start" className="reportDate" type="date" value={stockReportStart} max={stockReportEnd||undefined} onChange={e=>setStockReportStart(e.target.value)}/></div>
+              <div><label className="reportFieldLabel" htmlFor="stock-report-end">Data final</label><input id="stock-report-end" className="reportDate" type="date" value={stockReportEnd} min={stockReportStart||undefined} onChange={e=>setStockReportEnd(e.target.value)}/></div>
+            </div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap",marginBottom:16}}>
+              <span className="muted">{filteredStockMovements.length} movimentação(ões) encontradas</span>
+              <button className="reportClear" onClick={()=>{setStockReportMaterial("Todos");setStockReportType("Todos");setStockReportStart("");setStockReportEnd("")}}>Limpar filtros</button>
+            </div>
+            <div className="stats" style={{marginBottom:18}}>
+              <Stat icon={<History/>} label="Total de registros" value={stockReportSummary.total} tone="blue"/>
+              <Stat icon={<ArrowUpRight/>} label="Entradas" value={stockReportSummary.entries} tone="green"/>
+              <Stat icon={<Activity/>} label="Saídas" value={stockReportSummary.exits} tone="blue"/>
+              <Stat icon={<RefreshCw/>} label="Ajustes" value={stockReportSummary.adjustments} tone="amber"/>
+              <Stat icon={<Layers/>} label="Reservas e cancelamentos" value={stockReportSummary.reservations} tone="violet"/>
+            </div>
+            {!filteredStockMovements.length ? <div className="emptyTable">Nenhuma movimentação encontrada para os filtros selecionados.</div> :
+              <div className="tableWrap"><table><thead><tr><th>Data</th><th>Material</th><th>Tipo</th><th>Quantidade</th><th>Origem</th><th>Observações</th></tr></thead><tbody>
+                {filteredStockMovements.map(m=>{
                   const material=stockMaterials.find(item=>item.id===m.material_id);
                   const request=tasks.find(item=>item.id===m.request_id);
-                  const labels:Record<string,string>={entrada:"Entrada",saida:"SaÃ­da",reserva:"Reserva",cancelamento_reserva:"Cancelamento de reserva",ajuste:"Ajuste"};
+                  const labels:Record<string,string>={entrada:"Entrada",saida:"Saída",reserva:"Reserva",cancelamento_reserva:"Cancelamento de reserva",ajuste:"Ajuste"};
                   return <tr key={m.id}>
                     <td>{new Date(m.created_at).toLocaleString("pt-BR")}</td>
-                    <td>{material?.name||"Material nÃ£o encontrado"}</td>
+                    <td>{material?.name||"Material não encontrado"}</td>
                     <td>{labels[m.movement_type]||m.movement_type}</td>
                     <td><b>{m.movement_type==="ajuste"&&Number(m.quantity)>0?"+":""}{Number(m.quantity).toLocaleString("pt-BR",{maximumFractionDigits:2})} {material?.unit||""}</b></td>
-                    <td>{request?`SolicitaÃ§Ã£o #${request.protocol}`:m.material_order_id?"Pedido de materiais":"MovimentaÃ§Ã£o manual"}</td>
-                    <td>{m.notes||"â€”"}</td>
+                    <td>{request?"Solicitação #"+request.protocol:m.material_order_id?"Pedido de materiais":"Movimentação manual"}</td>
+                    <td>{m.notes||"—"}</td>
                   </tr>;
                 })}
               </tbody></table></div>}
-          </div>}
+          </div>}          </div>}
         </>}
         {active==="RelatÃ³rios" && <>
           <div className="pageHeading" style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:16,flexWrap:"wrap"}}><div><p className="eyebrow">ANÃLISE GERENCIAL</p><h1>RelatÃ³rios</h1><p className="sub">Acompanhe resultados, produtividade e distribuiÃ§Ã£o das demandas.</p></div><button type="button" className="secondary" onClick={exportReports}><Download size={16}/> Exportar relatório</button></div>
