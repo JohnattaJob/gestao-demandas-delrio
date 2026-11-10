@@ -1052,45 +1052,66 @@ export default function Home() {
                 })}
               </tbody></table></div>}
           </div>
-          {canManageStock && <div className="panel" style={{marginTop:18}}>
-            <div className="panelHead">
-              <div><h3>Relatório de movimentações</h3><p>Consulte e exporte entradas, saídas, ajustes e movimentações de reservas.</p></div>
-              <button className="secondary" onClick={exportStockMovements} disabled={!filteredStockMovements.length}><Download size={15}/> Exportar CSV</button>
-            </div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:14,marginBottom:18}}>
-              <div><label className="reportFieldLabel" htmlFor="stock-report-material">Material</label><select id="stock-report-material" className="reportSelect" value={stockReportMaterial} onChange={e=>setStockReportMaterial(e.target.value)}><option value="Todos">Todos os materiais</option>{stockMaterials.map(material=><option key={material.id} value={material.id}>{material.name}</option>)}</select></div>
-              <div><label className="reportFieldLabel" htmlFor="stock-report-type">Tipo de movimentação</label><select id="stock-report-type" className="reportSelect" value={stockReportType} onChange={e=>setStockReportType(e.target.value)}><option value="Todos">Todos os tipos</option><option value="entrada">Entrada</option><option value="saida">Saída</option><option value="ajuste">Ajuste</option><option value="reserva">Reserva</option><option value="cancelamento_reserva">Cancelamento de reserva</option></select></div>
-              <div><label className="reportFieldLabel" htmlFor="stock-report-start">Data inicial</label><input id="stock-report-start" className="reportDate" type="date" value={stockReportStart} max={stockReportEnd||undefined} onChange={e=>setStockReportStart(e.target.value)}/></div>
-              <div><label className="reportFieldLabel" htmlFor="stock-report-end">Data final</label><input id="stock-report-end" className="reportDate" type="date" value={stockReportEnd} min={stockReportStart||undefined} onChange={e=>setStockReportEnd(e.target.value)}/></div>
-            </div>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap",marginBottom:16}}>
-              <span className="muted">{filteredStockMovements.length} movimentação(ões) encontradas</span>
-              <button className="reportClear" onClick={()=>{setStockReportMaterial("Todos");setStockReportType("Todos");setStockReportStart("");setStockReportEnd("")}}>Limpar filtros</button>
-            </div>
-            <div className="stats" style={{marginBottom:18}}>
+          {canManageStock && <>
+            <style>{`
+              .stockReportFilters{padding:22px 24px;margin:18px 0;border:1px solid #e7e8ef;background:linear-gradient(135deg,#fff 0%,#fcfbff 100%);box-shadow:0 5px 18px rgba(31,24,55,.035)}
+              .stockReportTop{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:20px}
+              .stockReportTitle{display:flex;align-items:center;gap:11px}.stockReportIcon{width:38px;height:38px;display:grid;place-items:center;border-radius:12px;background:#f2eaff;color:#7a1bd8;flex:none}
+              .stockReportTitle h3{margin:0 0 4px;font-size:15px;font-weight:700;color:#20202b}.stockReportTitle p{margin:0;font-size:12px;color:#858397}
+              .stockReportGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(185px,1fr));gap:14px;align-items:start}
+              .stockReportBottom{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:18px;padding-top:14px;border-top:1px solid #f0edf4;flex-wrap:wrap}
+              .stockReportKpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px;margin:0 0 18px}
+              .stockReportPanel{padding:22px 24px}.stockReportPanelHead{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:18px}.stockReportPanelHead h3{margin:0 0 4px;font-size:15px}.stockReportPanelHead p{margin:0;color:#858397;font-size:12px}
+              @media(max-width:1100px){.stockReportKpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
+              @media(max-width:700px){.stockReportFilters,.stockReportPanel{padding:18px}.stockReportKpis{grid-template-columns:repeat(2,minmax(0,1fr))}.stockReportTop{flex-direction:column}}
+              @media(max-width:420px){.stockReportKpis{grid-template-columns:1fr}}
+            `}</style>
+            <section className="panel stockReportFilters">
+              <div className="stockReportTop">
+                <div className="stockReportTitle"><span className="stockReportIcon"><CalendarDays size={19}/></span><div><h3>Relatório de movimentações</h3><p>Consulte e refine as entradas, saídas, ajustes e movimentações de reservas.</p></div></div>
+                <button className="reportClear" onClick={()=>{setStockReportMaterial("Todos");setStockReportType("Todos");setStockReportStart("");setStockReportEnd("")}}>Limpar filtros</button>
+              </div>
+              <div className="stockReportGrid">
+                <div><label className="reportFieldLabel" htmlFor="stock-report-material">Material</label><select id="stock-report-material" className="reportSelect" value={stockReportMaterial} onChange={e=>setStockReportMaterial(e.target.value)}><option value="Todos">Todos os materiais</option>{stockMaterials.map(material=><option key={material.id} value={material.id}>{material.name}</option>)}</select></div>
+                <div><label className="reportFieldLabel" htmlFor="stock-report-type">Tipo de movimentação</label><select id="stock-report-type" className="reportSelect" value={stockReportType} onChange={e=>setStockReportType(e.target.value)}><option value="Todos">Todos os tipos</option><option value="entrada">Entrada</option><option value="saida">Saída</option><option value="ajuste">Ajuste</option><option value="reserva">Reserva</option><option value="cancelamento_reserva">Cancelamento de reserva</option></select></div>
+                <div><label className="reportFieldLabel" htmlFor="stock-report-start">Data inicial</label><input id="stock-report-start" className="reportDate" type="date" value={stockReportStart} max={stockReportEnd||undefined} onChange={e=>setStockReportStart(e.target.value)}/></div>
+                <div><label className="reportFieldLabel" htmlFor="stock-report-end">Data final</label><input id="stock-report-end" className="reportDate" type="date" value={stockReportEnd} min={stockReportStart||undefined} onChange={e=>setStockReportEnd(e.target.value)}/></div>
+              </div>
+              <div className="stockReportBottom">
+                <span className="reportSummary"><CalendarDays size={14}/> {filteredStockMovements.length} movimentação(ões) no resultado</span>
+                <span className="reportSummary">Período personalizado conforme as datas selecionadas</span>
+              </div>
+            </section>
+            <div className="stockReportKpis">
               <Stat icon={<History/>} label="Total de registros" value={stockReportSummary.total} tone="blue"/>
               <Stat icon={<ArrowUpRight/>} label="Entradas" value={stockReportSummary.entries} tone="green"/>
               <Stat icon={<Activity/>} label="Saídas" value={stockReportSummary.exits} tone="blue"/>
               <Stat icon={<RefreshCw/>} label="Ajustes" value={stockReportSummary.adjustments} tone="amber"/>
               <Stat icon={<Layers/>} label="Reservas e cancelamentos" value={stockReportSummary.reservations} tone="violet"/>
             </div>
-            {!filteredStockMovements.length ? <div className="emptyTable">Nenhuma movimentação encontrada para os filtros selecionados.</div> :
-              <div className="tableWrap"><table><thead><tr><th>Data</th><th>Material</th><th>Tipo</th><th>Quantidade</th><th>Origem</th><th>Observações</th></tr></thead><tbody>
-                {filteredStockMovements.map(m=>{
-                  const material=stockMaterials.find(item=>item.id===m.material_id);
-                  const request=tasks.find(item=>item.id===m.request_id);
-                  const labels:Record<string,string>={entrada:"Entrada",saida:"Saída",reserva:"Reserva",cancelamento_reserva:"Cancelamento de reserva",ajuste:"Ajuste"};
-                  return <tr key={m.id}>
-                    <td>{new Date(m.created_at).toLocaleString("pt-BR")}</td>
-                    <td>{material?.name||"Material não encontrado"}</td>
-                    <td>{labels[m.movement_type]||m.movement_type}</td>
-                    <td><b>{m.movement_type==="ajuste"&&Number(m.quantity)>0?"+":""}{Number(m.quantity).toLocaleString("pt-BR",{maximumFractionDigits:2})} {material?.unit||""}</b></td>
-                    <td>{request?"Solicitação #"+request.protocol:m.material_order_id?"Pedido de materiais":"Movimentação manual"}</td>
-                    <td>{m.notes||"—"}</td>
-                  </tr>;
-                })}
-              </tbody></table></div>}
-          </div>}
+            <section className="panel stockReportPanel">
+              <div className="stockReportPanelHead">
+                <div><h3>Detalhamento das movimentações</h3><p>Registros que compõem os indicadores acima.</p></div>
+                <button className="secondary" onClick={exportStockMovements} disabled={!filteredStockMovements.length}><Download size={15}/> Exportar CSV</button>
+              </div>
+              {!filteredStockMovements.length ? <div className="emptyTable">Nenhuma movimentação encontrada para os filtros selecionados.</div> :
+                <div className="tableWrap"><table><thead><tr><th>Data</th><th>Material</th><th>Tipo</th><th>Quantidade</th><th>Origem</th><th>Observações</th></tr></thead><tbody>
+                  {filteredStockMovements.map(m=>{
+                    const material=stockMaterials.find(item=>item.id===m.material_id);
+                    const request=tasks.find(item=>item.id===m.request_id);
+                    const labels:Record<string,string>={entrada:"Entrada",saida:"Saída",reserva:"Reserva",cancelamento_reserva:"Cancelamento de reserva",ajuste:"Ajuste"};
+                    return <tr key={m.id}>
+                      <td>{new Date(m.created_at).toLocaleString("pt-BR")}</td>
+                      <td>{material?.name||"Material não encontrado"}</td>
+                      <td>{labels[m.movement_type]||m.movement_type}</td>
+                      <td><b>{m.movement_type==="ajuste"&&Number(m.quantity)>0?"+":""}{Number(m.quantity).toLocaleString("pt-BR",{maximumFractionDigits:2})} {material?.unit||""}</b></td>
+                      <td>{request?"Solicitação #"+request.protocol:m.material_order_id?"Pedido de materiais":"Movimentação manual"}</td>
+                      <td>{m.notes||"—"}</td>
+                    </tr>;
+                  })}
+                </tbody></table></div>}
+            </section>
+          </>}
         </>}
         {active==="RelatÃ³rios" && <>
           <div className="pageHeading" style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:16,flexWrap:"wrap"}}><div><p className="eyebrow">ANÃLISE GERENCIAL</p><h1>RelatÃ³rios</h1><p className="sub">Acompanhe resultados, produtividade e distribuiÃ§Ã£o das demandas.</p></div><button type="button" className="secondary" onClick={exportReports}><Download size={16}/> Exportar relatório</button></div>
