@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import type { Session, User } from "@supabase/supabase-js";
@@ -9,8 +9,8 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
-type Status = "Recebida" | "Em análise" | "Aguardando aprovação" | "Em execução" | "Concluída" | "Cancelada";
-type Priority = "Baixa" | "Média" | "Alta" | "Urgente";
+type Status = "Recebida" | "Em anÃ¡lise" | "Aguardando aprovaÃ§Ã£o" | "Em execuÃ§Ã£o" | "ConcluÃ­da" | "Cancelada";
+type Priority = "Baixa" | "MÃ©dia" | "Alta" | "Urgente";
 type Area = { id: string; name: string };
 type Profile = { id: string; full_name: string; email: string | null; role: "admin" | "gestor" | "colaborador"; area_id: string | null; area_ids?: string[]; active: boolean; stock_manager: boolean };
 type Task = { id: string; protocol: number; title: string; area: string; areaId: string; owner: string; requester: string; requesterId: string; priority: Priority; status: Status; due: string; created: string; completedAt: string | null; description: string; ownerId: string | null };
@@ -41,12 +41,12 @@ type MaterialOrder = { id:string; protocol:number; requester_id:string; area_id:
 type MaterialOrderItem = { id:string; order_id:string; material_id:string; quantity:number; material?:{name:string;unit:string;sku:string|null} };
 type MaterialOrderHistory = { id:string; order_id:string; actor_id:string|null; action:string; previous_status:string|null; new_status:string|null; details:string|null; created_at:string; actor_name?:string };
 
-const statusToDb: Record<Status,string> = { "Recebida":"recebida", "Em análise":"em_analise", "Aguardando aprovação":"aguardando_aprovacao", "Em execução":"em_execucao", "Concluída":"concluida", "Cancelada":"cancelada" };
-const dbToStatus: Record<string,Status> = { recebida:"Recebida", em_analise:"Em análise", aguardando_aprovacao:"Aguardando aprovação", em_execucao:"Em execução", concluida:"Concluída", cancelada:"Cancelada" };
-const priorityToDb: Record<Priority,string> = { "Baixa":"baixa", "Média":"media", "Alta":"alta", "Urgente":"urgente" };
-const dbToPriority: Record<string,Priority> = { baixa:"Baixa", media:"Média", alta:"Alta", urgente:"Urgente" };
-const statusClass: Record<Status,string> = { "Recebida":"gray", "Em análise":"blue", "Aguardando aprovação":"amber", "Em execução":"violet", "Concluída":"green", "Cancelada":"red" };
-const defaultAreas = ["Criação","Trade Marketing","Eventos e Ações","Materiais e Estoque","E-commerce","Planejamento e Marketing","Social Media"];
+const statusToDb: Record<Status,string> = { "Recebida":"recebida", "Em anÃ¡lise":"em_analise", "Aguardando aprovaÃ§Ã£o":"aguardando_aprovacao", "Em execuÃ§Ã£o":"em_execucao", "ConcluÃ­da":"concluida", "Cancelada":"cancelada" };
+const dbToStatus: Record<string,Status> = { recebida:"Recebida", em_analise:"Em anÃ¡lise", aguardando_aprovacao:"Aguardando aprovaÃ§Ã£o", em_execucao:"Em execuÃ§Ã£o", concluida:"ConcluÃ­da", cancelada:"Cancelada" };
+const priorityToDb: Record<Priority,string> = { "Baixa":"baixa", "MÃ©dia":"media", "Alta":"alta", "Urgente":"urgente" };
+const dbToPriority: Record<string,Priority> = { baixa:"Baixa", media:"MÃ©dia", alta:"Alta", urgente:"Urgente" };
+const statusClass: Record<Status,string> = { "Recebida":"gray", "Em anÃ¡lise":"blue", "Aguardando aprovaÃ§Ã£o":"amber", "Em execuÃ§Ã£o":"violet", "ConcluÃ­da":"green", "Cancelada":"red" };
+const defaultAreas = ["CriaÃ§Ã£o","Trade Marketing","Eventos e AÃ§Ãµes","Materiais e Estoque","E-commerce","Planejamento e Marketing","Social Media"];
 
 export default function Home() {
   const [session,setSession] = useState<Session|null>(null);
@@ -95,7 +95,7 @@ export default function Home() {
   const [completeConfirm,setCompleteConfirm] = useState(false);
   const [memberForm,setMemberForm] = useState({full_name:"",role:"colaborador" as Profile["role"],area_ids:[] as string[],active:true,stock_manager:false});
   const [saving,setSaving] = useState(false);
-  const [form,setForm] = useState({title:"",areaId:"",ownerId:"",priority:"Média" as Priority,due:"",description:""});
+  const [form,setForm] = useState({title:"",areaId:"",ownerId:"",priority:"MÃ©dia" as Priority,due:"",description:""});
   const isManager = profile?.role === "admin" || profile?.role === "gestor";
   const canManageStock = profile?.role === "admin" || profile?.stock_manager === true;
 
@@ -123,7 +123,7 @@ export default function Home() {
   const [orderDraftItems,setOrderDraftItems] = useState<{material_id:string;quantity:string}[]>([{material_id:"",quantity:"1"}]);
 
   useEffect(() => {
-    if (!supabase) { setAuthLoading(false); setLoginError("As variáveis do Supabase não foram encontradas. Confira o arquivo .env.local e reinicie o servidor."); return; }
+    if (!supabase) { setAuthLoading(false); setLoginError("As variÃ¡veis do Supabase nÃ£o foram encontradas. Confira o arquivo .env.local e reinicie o servidor."); return; }
     supabase.auth.getSession().then(({data}) => { setSession(data.session); setAuthLoading(false); });
     const { data: listener } = supabase.auth.onAuthStateChange((_event,nextSession) => { setSession(nextSession); setProfile(null); });
     return () => listener.subscription.unsubscribe();
@@ -135,7 +135,7 @@ export default function Home() {
     try {
       const profileResult = await supabase.from("profiles").select("id,full_name,email,role,area_id,active,stock_manager").eq("id",user.id).single();
       if (profileResult.error) throw profileResult.error;
-      if (!profileResult.data.active) throw new Error("Seu usuário está inativo. Procure o administrador do sistema.");
+      if (!profileResult.data.active) throw new Error("Seu usuÃ¡rio estÃ¡ inativo. Procure o administrador do sistema.");
       const p = profileResult.data as Profile;
       const [areaResult, requestResult, memberResult, profileAreasResult] = await Promise.all([
         supabase.from("areas").select("id,name").eq("active",true).order("name"),
@@ -153,14 +153,14 @@ export default function Home() {
       setAreas((areaResult.data||[]) as Area[]);
       setMembers(((memberResult.data||[]) as Profile[]).map(member => ({...member, area_ids: idsForProfile(member.id)})));
       const mapped = (requestResult.data||[]).map((r:any):Task => ({
-        id:r.id, protocol:Number(r.protocol), title:r.title, area:r.area?.name||"Área não definida", areaId:r.area_id,
-        owner:r.owner?.full_name||"Não atribuído", ownerId:r.owner_id, requester:r.requester?.full_name||"Solicitante", requesterId:r.requester_id,
-        priority:dbToPriority[r.priority]||"Média", status:dbToStatus[r.status]||"Recebida",
+        id:r.id, protocol:Number(r.protocol), title:r.title, area:r.area?.name||"Ãrea nÃ£o definida", areaId:r.area_id,
+        owner:r.owner?.full_name||"NÃ£o atribuÃ­do", ownerId:r.owner_id, requester:r.requester?.full_name||"Solicitante", requesterId:r.requester_id,
+        priority:dbToPriority[r.priority]||"MÃ©dia", status:dbToStatus[r.status]||"Recebida",
         due:r.due_date, created:r.created_at?.slice(0,10)||"", completedAt:r.completed_at||null, description:r.description||""
       }));
       setTasks(mapped);
     } catch (error:any) {
-      setDataError(error.message || "Não foi possível carregar os dados do Supabase.");
+      setDataError(error.message || "NÃ£o foi possÃ­vel carregar os dados do Supabase.");
     } finally { setDataLoading(false); }
   },[]);
 
@@ -196,7 +196,7 @@ export default function Home() {
           : materialRows[0]?.id || ""
       }));
     } catch (error:any) {
-      setStockError(error.message || "Não foi possível carregar o estoque.");
+      setStockError(error.message || "NÃ£o foi possÃ­vel carregar o estoque.");
     } finally {
       setStockLoading(false);
     }
@@ -234,11 +234,16 @@ export default function Home() {
           const {data:actors,error:actorsError} = await supabase.from("profiles").select("id,full_name").in("id",actorIds);
           if (!actorsError) actorMap = Object.fromEntries((actors||[]).map((actor:any)=>[actor.id,actor.full_name]));
         }
-        setMaterialOrderItems((itemsResult.data || []) as MaterialOrderItem[]);
-        setMaterialOrderHistory(historyRows.map(item=>({...item,actor_name:item.actor_id?(actorMap[item.actor_id]||"Usuário"):"Sistema"})));
+        setMaterialOrderItems((itemsResult.data || []).map((item: any) => ({
+          ...item,
+          material: Array.isArray(item.material)
+            ? item.material[0] ?? undefined
+            : item.material
+        })) as MaterialOrderItem[]);
+        setMaterialOrderHistory(historyRows.map(item=>({...item,actor_name:item.actor_id?(actorMap[item.actor_id]||"UsuÃ¡rio"):"Sistema"})));
       }
     } catch (error:any) {
-      setOrdersError(error.message || "Não foi possível carregar os pedidos de materiais.");
+      setOrdersError(error.message || "NÃ£o foi possÃ­vel carregar os pedidos de materiais.");
     } finally {
       setOrdersLoading(false);
     }
@@ -263,7 +268,7 @@ export default function Home() {
       if (!active) return;
       if (error) {
         setAreaMembers([]);
-        setDataError(`Não foi possível carregar os responsáveis da área: ${error.message}`);
+        setDataError(`NÃ£o foi possÃ­vel carregar os responsÃ¡veis da Ã¡rea: ${error.message}`);
         return;
       }
       const available = (data || []) as AreaMember[];
@@ -289,7 +294,7 @@ export default function Home() {
       if (!active) return;
       if (error) {
         setSelectedAreaMembers([]);
-        setDataError(`Não foi possível carregar os responsáveis da solicitação: ${error.message}`);
+        setDataError(`NÃ£o foi possÃ­vel carregar os responsÃ¡veis da solicitaÃ§Ã£o: ${error.message}`);
         return;
       }
       setSelectedAreaMembers((data || []) as AreaMember[]);
@@ -310,7 +315,7 @@ export default function Home() {
   const filtered = useMemo(() => tasks.filter(t => {
     const matchesSearch = [t.title,t.owner,t.area,t.status,String(t.protocol)].join(" ").toLowerCase().includes(search.toLowerCase());
     const matchesUser = requestUserFilter === "Todos"
-      || (requestUserFilter === "Sem responsável" && !t.ownerId)
+      || (requestUserFilter === "Sem responsÃ¡vel" && !t.ownerId)
       || t.ownerId === requestUserFilter;
     return matchesSearch && matchesUser;
   }),[tasks,search,requestUserFilter]);
@@ -338,24 +343,24 @@ export default function Home() {
       return !!rawDate && rawDate >= start && rawDate <= end;
     });
   },[tasks,dashboardPeriod,dashboardDateRange,dashboardDateMode]);
-  const dashboardDateLabel = dashboardDateMode === "created" ? "data de abertura" : dashboardDateMode === "due" ? "data do prazo" : "data de conclusão";
-  const late = tasks.filter(t => t.status!=="Concluída" && t.status!=="Cancelada" && t.due && new Date(t.due+"T23:59:00") < new Date()).length;
-  const done = tasks.filter(t=>t.status==="Concluída").length;
-  const inProgress = tasks.filter(t=>t.status==="Em execução"||t.status==="Em análise"||t.status==="Aguardando aprovação").length;
+  const dashboardDateLabel = dashboardDateMode === "created" ? "data de abertura" : dashboardDateMode === "due" ? "data do prazo" : "data de conclusÃ£o";
+  const late = tasks.filter(t => t.status!=="ConcluÃ­da" && t.status!=="Cancelada" && t.due && new Date(t.due+"T23:59:00") < new Date()).length;
+  const done = tasks.filter(t=>t.status==="ConcluÃ­da").length;
+  const inProgress = tasks.filter(t=>t.status==="Em execuÃ§Ã£o"||t.status==="Em anÃ¡lise"||t.status==="Aguardando aprovaÃ§Ã£o").length;
   const areaNames = areas.length ? areas.map(a=>a.name) : defaultAreas;
-  const dashboardLate = dashboardTasks.filter(t => t.status!=="Concluída" && t.status!=="Cancelada" && t.due && new Date(t.due+"T23:59:00") < new Date()).length;
-  const dashboardDone = dashboardTasks.filter(t=>t.status==="Concluída").length;
-  const dashboardInProgress = dashboardTasks.filter(t=>t.status==="Em execução"||t.status==="Em análise"||t.status==="Aguardando aprovação").length;
+  const dashboardLate = dashboardTasks.filter(t => t.status!=="ConcluÃ­da" && t.status!=="Cancelada" && t.due && new Date(t.due+"T23:59:00") < new Date()).length;
+  const dashboardDone = dashboardTasks.filter(t=>t.status==="ConcluÃ­da").length;
+  const dashboardInProgress = dashboardTasks.filter(t=>t.status==="Em execuÃ§Ã£o"||t.status==="Em anÃ¡lise"||t.status==="Aguardando aprovaÃ§Ã£o").length;
   const requestsByOwner = useMemo(() => {
     const grouped = new Map<string,{id:string;name:string;total:number;inProgress:number;done:number;late:number;cancelled:number}>();
     dashboardTasks.forEach(task => {
       if (!task.ownerId) return;
       const current = grouped.get(task.ownerId) || {id:task.ownerId,name:task.owner,total:0,inProgress:0,done:0,late:0,cancelled:0};
       current.total += 1;
-      if (task.status === "Em análise" || task.status === "Aguardando aprovação" || task.status === "Em execução") current.inProgress += 1;
-      if (task.status === "Concluída") current.done += 1;
+      if (task.status === "Em anÃ¡lise" || task.status === "Aguardando aprovaÃ§Ã£o" || task.status === "Em execuÃ§Ã£o") current.inProgress += 1;
+      if (task.status === "ConcluÃ­da") current.done += 1;
       if (task.status === "Cancelada") current.cancelled += 1;
-      if (task.status !== "Concluída" && task.status !== "Cancelada" && task.due && new Date(task.due+"T23:59:00") < new Date()) current.late += 1;
+      if (task.status !== "ConcluÃ­da" && task.status !== "Cancelada" && task.due && new Date(task.due+"T23:59:00") < new Date()) current.late += 1;
       grouped.set(task.ownerId,current);
     });
     return [...grouped.values()].sort((a,b)=>b.total-a.total || a.name.localeCompare(b.name,"pt-BR"));
@@ -371,8 +376,8 @@ export default function Home() {
   },[reportPeriod,reportStartDate,reportEndDate]);
   const reportTasks = useMemo(() => tasks.filter(task => {
     if (reportAreaFilter !== "Todas" && task.areaId !== reportAreaFilter) return false;
-    if (reportOwnerFilter === "Sem responsável" && task.ownerId) return false;
-    if (reportOwnerFilter !== "Todos" && reportOwnerFilter !== "Sem responsável" && task.ownerId !== reportOwnerFilter) return false;
+    if (reportOwnerFilter === "Sem responsÃ¡vel" && task.ownerId) return false;
+    if (reportOwnerFilter !== "Todos" && reportOwnerFilter !== "Sem responsÃ¡vel" && task.ownerId !== reportOwnerFilter) return false;
     if (reportStatusFilter !== "Todos" && task.status !== reportStatusFilter) return false;
     if (reportPeriod === "all") return true;
     const {start,end}=reportDateRange;
@@ -380,25 +385,25 @@ export default function Home() {
     const rawDate = reportDateMode === "created" ? task.created : reportDateMode === "due" ? task.due : task.completedAt?.slice(0,10) || "";
     return !!rawDate && rawDate >= start && rawDate <= end;
   }),[tasks,reportAreaFilter,reportOwnerFilter,reportStatusFilter,reportPeriod,reportDateRange,reportDateMode]);
-  const reportDone = reportTasks.filter(t=>t.status==="Concluída").length;
-  const reportInProgress = reportTasks.filter(t=>t.status==="Em execução"||t.status==="Em análise"||t.status==="Aguardando aprovação").length;
-  const reportLate = reportTasks.filter(t=>t.status!=="Concluída"&&t.status!=="Cancelada"&&t.due&&new Date(t.due+"T23:59:00")<new Date()).length;
+  const reportDone = reportTasks.filter(t=>t.status==="ConcluÃ­da").length;
+  const reportInProgress = reportTasks.filter(t=>t.status==="Em execuÃ§Ã£o"||t.status==="Em anÃ¡lise"||t.status==="Aguardando aprovaÃ§Ã£o").length;
+  const reportLate = reportTasks.filter(t=>t.status!=="ConcluÃ­da"&&t.status!=="Cancelada"&&t.due&&new Date(t.due+"T23:59:00")<new Date()).length;
   const reportCompletionBase = reportTasks.filter(t=>t.status!=="Cancelada").length;
   const reportCompletionRate = reportCompletionBase ? Math.round(reportDone/reportCompletionBase*100) : 0;
   const reportByArea = areaNames.map(name=>({name,total:reportTasks.filter(t=>t.area===name).length})).filter(x=>x.total>0).sort((a,b)=>b.total-a.total);
   const reportByOwner = (() => {
     const grouped = new Map<string,{id:string;name:string;total:number;done:number;inProgress:number;late:number}>();
-    reportTasks.forEach(task=>{const key=task.ownerId||"unassigned";const item=grouped.get(key)||{id:key,name:task.ownerId?task.owner:"Sem responsável",total:0,done:0,inProgress:0,late:0};item.total++;if(task.status==="Concluída")item.done++;if(task.status==="Em execução"||task.status==="Em análise"||task.status==="Aguardando aprovação")item.inProgress++;if(task.status!=="Concluída"&&task.status!=="Cancelada"&&task.due&&new Date(task.due+"T23:59:00")<new Date())item.late++;grouped.set(key,item);});
+    reportTasks.forEach(task=>{const key=task.ownerId||"unassigned";const item=grouped.get(key)||{id:key,name:task.ownerId?task.owner:"Sem responsÃ¡vel",total:0,done:0,inProgress:0,late:0};item.total++;if(task.status==="ConcluÃ­da")item.done++;if(task.status==="Em execuÃ§Ã£o"||task.status==="Em anÃ¡lise"||task.status==="Aguardando aprovaÃ§Ã£o")item.inProgress++;if(task.status!=="ConcluÃ­da"&&task.status!=="Cancelada"&&task.due&&new Date(task.due+"T23:59:00")<new Date())item.late++;grouped.set(key,item);});
     return [...grouped.values()].sort((a,b)=>b.total-a.total||a.name.localeCompare(b.name,"pt-BR"));
   })();
-  const reportDateLabel = reportDateMode==="created"?"data de abertura":reportDateMode==="completed"?"data de conclusão":"data do prazo";
+  const reportDateLabel = reportDateMode==="created"?"data de abertura":reportDateMode==="completed"?"data de conclusÃ£o":"data do prazo";
   const scheduleToday = (() => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })();
   const scheduleTasks = useMemo(() => tasks.filter(task => {
-    if (scheduleOwnerFilter === "Sem responsável" && task.ownerId) return false;
-    if (scheduleOwnerFilter !== "Todos" && scheduleOwnerFilter !== "Sem responsável" && task.ownerId !== scheduleOwnerFilter) return false;
+    if (scheduleOwnerFilter === "Sem responsÃ¡vel" && task.ownerId) return false;
+    if (scheduleOwnerFilter !== "Todos" && scheduleOwnerFilter !== "Sem responsÃ¡vel" && task.ownerId !== scheduleOwnerFilter) return false;
     if (scheduleAreaFilter !== "Todas" && task.areaId !== scheduleAreaFilter) return false;
     if (scheduleStatusFilter !== "Todos" && task.status !== scheduleStatusFilter) return false;
-    if (schedulePeriod === "overdue") return task.status !== "Concluída" && task.status !== "Cancelada" && !!task.due && task.due < scheduleToday;
+    if (schedulePeriod === "overdue") return task.status !== "ConcluÃ­da" && task.status !== "Cancelada" && !!task.due && task.due < scheduleToday;
     if (schedulePeriod === "custom") {
       if (!task.due) return false;
       if (scheduleStartDate && task.due < scheduleStartDate) return false;
@@ -408,18 +413,18 @@ export default function Home() {
     if (schedulePeriod === "7" || schedulePeriod === "30") {
       const limit = new Date(); limit.setDate(limit.getDate() + Number(schedulePeriod));
       const end = `${limit.getFullYear()}-${String(limit.getMonth()+1).padStart(2,"0")}-${String(limit.getDate()).padStart(2,"0")}`;
-      return !!task.due && task.due >= scheduleToday && task.due <= end && task.status !== "Concluída" && task.status !== "Cancelada";
+      return !!task.due && task.due >= scheduleToday && task.due <= end && task.status !== "ConcluÃ­da" && task.status !== "Cancelada";
     }
     return true;
   }).sort((a,b) => (a.due || "9999-99-99").localeCompare(b.due || "9999-99-99")), [tasks,scheduleOwnerFilter,scheduleAreaFilter,scheduleStatusFilter,schedulePeriod,scheduleStartDate,scheduleEndDate,scheduleToday]);
-  const scheduleOverdueCount = tasks.filter(t=>t.status!=="Concluída"&&t.status!=="Cancelada"&&t.due&&t.due<scheduleToday).length;
-  const scheduleTodayCount = tasks.filter(t=>t.status!=="Concluída"&&t.status!=="Cancelada"&&t.due===scheduleToday).length;
-  const scheduleNextSevenCount = tasks.filter(t=>t.status!=="Concluída"&&t.status!=="Cancelada"&&t.due&&t.due>=scheduleToday&&t.due<=(()=>{const d=new Date();d.setDate(d.getDate()+7);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`})()).length;
+  const scheduleOverdueCount = tasks.filter(t=>t.status!=="ConcluÃ­da"&&t.status!=="Cancelada"&&t.due&&t.due<scheduleToday).length;
+  const scheduleTodayCount = tasks.filter(t=>t.status!=="ConcluÃ­da"&&t.status!=="Cancelada"&&t.due===scheduleToday).length;
+  const scheduleNextSevenCount = tasks.filter(t=>t.status!=="ConcluÃ­da"&&t.status!=="Cancelada"&&t.due&&t.due>=scheduleToday&&t.due<=(()=>{const d=new Date();d.setDate(d.getDate()+7);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`})()).length;
   const selectedMemberTasks = useMemo(() => selectedMember ? tasks.filter(t => t.ownerId === selectedMember.id) : [], [tasks, selectedMember]);
   const visibleMemberTasks = useMemo(() => memberTaskStatus === "Todas" ? selectedMemberTasks : selectedMemberTasks.filter(t => t.status === memberTaskStatus), [selectedMemberTasks, memberTaskStatus]);
-  const memberTasksLate = selectedMemberTasks.filter(t => t.status !== "Concluída" && t.status !== "Cancelada" && t.due && new Date(t.due + "T23:59:00") < new Date()).length;
-  const memberTasksInProgress = selectedMemberTasks.filter(t => t.status === "Em execução" || t.status === "Em análise" || t.status === "Aguardando aprovação").length;
-  const memberTasksDone = selectedMemberTasks.filter(t => t.status === "Concluída").length;
+  const memberTasksLate = selectedMemberTasks.filter(t => t.status !== "ConcluÃ­da" && t.status !== "Cancelada" && t.due && new Date(t.due + "T23:59:00") < new Date()).length;
+  const memberTasksInProgress = selectedMemberTasks.filter(t => t.status === "Em execuÃ§Ã£o" || t.status === "Em anÃ¡lise" || t.status === "Aguardando aprovaÃ§Ã£o").length;
+  const memberTasksDone = selectedMemberTasks.filter(t => t.status === "ConcluÃ­da").length;
   const filteredMaterials = useMemo(() => stockMaterials.filter(m =>
     [m.name,m.sku || "",m.description || ""].join(" ").toLowerCase().includes(stockSearch.toLowerCase())
   ),[stockMaterials,stockSearch]);
@@ -432,14 +437,14 @@ export default function Home() {
     return totals;
   },[stockMovements]);
   const myOrderAreas = profile?.role === "admin" ? areas : areas.filter(area => (profile?.area_ids||[]).includes(area.id) || profile?.area_id === area.id);
-  const orderAreaName = (id:string) => areas.find(area=>area.id===id)?.name || "Área não identificada";
+  const orderAreaName = (id:string) => areas.find(area=>area.id===id)?.name || "Ãrea nÃ£o identificada";
   const orderRequesterName = (id:string) => members.find(member=>member.id===id)?.full_name || (id===profile?.id?profile.full_name:"Solicitante");
   const orderStatusLabels:Record<MaterialOrderStatus,string> = {
-    aguardando_aprovacao_gestor:"Aguardando aprovação do gestor",
-    aguardando_aprovacao_estoque:"Aguardando aprovação do estoque",
-    em_separacao:"Em separação",
+    aguardando_aprovacao_gestor:"Aguardando aprovaÃ§Ã£o do gestor",
+    aguardando_aprovacao_estoque:"Aguardando aprovaÃ§Ã£o do estoque",
+    em_separacao:"Em separaÃ§Ã£o",
     aguardando_retirada:"Aguardando retirada",
-    concluido:"Concluído",
+    concluido:"ConcluÃ­do",
     rejeitado_gestor:"Rejeitado pelo gestor",
     rejeitado_estoque:"Rejeitado pelo estoque",
     cancelado:"Cancelado"
@@ -454,9 +459,9 @@ export default function Home() {
   async function createMaterialOrder() {
     if (!supabase || !profile) return;
     const cleanItems = orderDraftItems.map(item=>({material_id:item.material_id,quantity:Number(item.quantity)}));
-    if (!orderAreaId || !myOrderAreas.some(area=>area.id===orderAreaId)) { setOrdersError("Selecione uma área à qual você esteja vinculado."); return; }
+    if (!orderAreaId || !myOrderAreas.some(area=>area.id===orderAreaId)) { setOrdersError("Selecione uma Ã¡rea Ã  qual vocÃª esteja vinculado."); return; }
     if (!orderPurpose.trim()) { setOrdersError("Informe a finalidade do pedido."); return; }
-    if (!orderNeededBy) { setOrdersError("Informe quando os materiais serão necessários."); return; }
+    if (!orderNeededBy) { setOrdersError("Informe quando os materiais serÃ£o necessÃ¡rios."); return; }
     if (!cleanItems.length || cleanItems.some(item=>!item.material_id || !Number.isFinite(item.quantity) || item.quantity<=0)) { setOrdersError("Selecione os materiais e informe quantidades maiores que zero."); return; }
     if (new Set(cleanItems.map(item=>item.material_id)).size!==cleanItems.length) { setOrdersError("Cada material deve aparecer apenas uma vez. Ajuste a quantidade na mesma linha."); return; }
     setOrdersSaving(true); setOrdersError("");
@@ -481,10 +486,10 @@ export default function Home() {
     if (!supabase) return;
     let reason = "";
     if (reasonRequired) {
-      reason = window.prompt(functionName==="cancel_material_order"?"Informe o motivo do cancelamento:":"Informe o motivo da rejeição:")?.trim() || "";
-      if (!reason) { setOrdersError("A justificativa é obrigatória para esta operação."); return; }
+      reason = window.prompt(functionName==="cancel_material_order"?"Informe o motivo do cancelamento:":"Informe o motivo da rejeiÃ§Ã£o:")?.trim() || "";
+      if (!reason) { setOrdersError("A justificativa Ã© obrigatÃ³ria para esta operaÃ§Ã£o."); return; }
     }
-    if (functionName==="complete_material_order" && !window.confirm("Confirmar a entrega? Esta ação dará baixa no estoque físico e encerrará as reservas.")) return;
+    if (functionName==="complete_material_order" && !window.confirm("Confirmar a entrega? Esta aÃ§Ã£o darÃ¡ baixa no estoque fÃ­sico e encerrarÃ¡ as reservas.")) return;
     setOrdersSaving(true); setOrdersError("");
     const args:any = {p_order_id:orderId};
     if (reasonRequired) args.p_reason=reason;
@@ -497,15 +502,15 @@ export default function Home() {
   async function createTask() {
     if (!supabase || !profile || !form.title.trim() || !form.due || !form.areaId) return;
     if (areaMembers.length === 0) {
-      setDataError("A área selecionada não possui responsáveis ativos.");
+      setDataError("A Ã¡rea selecionada nÃ£o possui responsÃ¡veis ativos.");
       return;
     }
     if (areaMembers.length > 1 && !form.ownerId) {
-      setDataError("Selecione o responsável pela solicitação.");
+      setDataError("Selecione o responsÃ¡vel pela solicitaÃ§Ã£o.");
       return;
     }
     if (form.ownerId && !areaMembers.some(member => member.profile_id === form.ownerId)) {
-      setDataError("O responsável selecionado não pertence à área escolhida.");
+      setDataError("O responsÃ¡vel selecionado nÃ£o pertence Ã  Ã¡rea escolhida.");
       return;
     }
 
@@ -526,7 +531,7 @@ export default function Home() {
       setDataError(error.message);
     } else {
       setShowNew(false);
-      setForm(old => ({ ...old, title: "", ownerId: "", priority: "Média", due: "", description: "" }));
+      setForm(old => ({ ...old, title: "", ownerId: "", priority: "MÃ©dia", due: "", description: "" }));
       if (session?.user) await loadData(session.user);
     }
     setSaving(false);
@@ -536,7 +541,7 @@ export default function Home() {
     const name = materialForm.name.trim();
     const minimum = Number(materialForm.minimum_quantity || 0);
     if (!name) { setStockError("Informe o nome do material."); return; }
-    if (!Number.isFinite(minimum) || minimum < 0) { setStockError("Informe um estoque mínimo válido."); return; }
+    if (!Number.isFinite(minimum) || minimum < 0) { setStockError("Informe um estoque mÃ­nimo vÃ¡lido."); return; }
 
     setStockSaving(true);
     setStockError("");
@@ -565,7 +570,7 @@ export default function Home() {
     if (!movementForm.material_id) { setStockError("Selecione um material."); return; }
     if (!Number.isFinite(amount) || amount < 0 || (movementForm.movement_type !== "ajuste" && amount <= 0)) {
       setStockError(movementForm.movement_type === "ajuste"
-        ? "Informe um saldo físico contado válido (zero ou maior)."
+        ? "Informe um saldo fÃ­sico contado vÃ¡lido (zero ou maior)."
         : "Informe uma quantidade maior que zero.");
       return;
     }
@@ -585,7 +590,7 @@ export default function Home() {
       setMovementForm(old => ({...old,quantity:"",request_id:"",notes:""}));
       await loadStock();
       if (movementForm.movement_type === "ajuste" && data === null) {
-        setStockError("Nenhum ajuste foi necessário: o saldo informado já corresponde ao estoque registrado.");
+        setStockError("Nenhum ajuste foi necessÃ¡rio: o saldo informado jÃ¡ corresponde ao estoque registrado.");
       }
     }
     setStockSaving(false);
@@ -602,7 +607,7 @@ export default function Home() {
       new_active: memberForm.active
     });
     if (error) {
-      setMemberMessage(`Não foi possível salvar o cadastro: ${error.message}`);
+      setMemberMessage(`NÃ£o foi possÃ­vel salvar o cadastro: ${error.message}`);
       setMemberSaving(false);
       return;
     }
@@ -613,13 +618,13 @@ export default function Home() {
     });
 
     if (stockPermissionError) {
-      setMemberMessage(`O cadastro foi atualizado, mas não foi possível salvar a permissão de estoque: ${stockPermissionError.message}`);
+      setMemberMessage(`O cadastro foi atualizado, mas nÃ£o foi possÃ­vel salvar a permissÃ£o de estoque: ${stockPermissionError.message}`);
       if (session?.user) await loadData(session.user);
       setMemberSaving(false);
       return;
     }
 
-    setMemberMessage("Cadastro e permissão atualizados com sucesso.");
+    setMemberMessage("Cadastro e permissÃ£o atualizados com sucesso.");
     if (session?.user) await loadData(session.user);
     setSelectedMember(null);
     setMemberSaving(false);
@@ -629,14 +634,14 @@ export default function Home() {
     if (!supabase || !profile) return;
     const canDelete = isManager || task.requesterId === profile.id;
     if (!canDelete) {
-      setDataError("Você só pode excluir solicitações abertas por você. Gestores e administradores podem excluir qualquer solicitação.");
+      setDataError("VocÃª sÃ³ pode excluir solicitaÃ§Ãµes abertas por vocÃª. Gestores e administradores podem excluir qualquer solicitaÃ§Ã£o.");
       return;
     }
     setDeletingTask(true);
     setDataError("");
     const { error } = await supabase.rpc("soft_delete_request", { target_request: task.id });
     if (error) {
-      setDataError(`Não foi possível excluir a solicitação: ${error.message}`);
+      setDataError(`NÃ£o foi possÃ­vel excluir a solicitaÃ§Ã£o: ${error.message}`);
     } else {
       setDeleteConfirm(false);
       setSelected(null);
@@ -650,11 +655,11 @@ export default function Home() {
 
     const canUpdateStatus = isManager || (task.ownerId === profile.id && task.requesterId !== profile.id);
     if (patch.status && !canUpdateStatus) {
-      setDataError("Somente o responsável pela demanda ou um gestor pode alterar o status. O solicitante não pode alterar o status da própria solicitação.");
+      setDataError("Somente o responsÃ¡vel pela demanda ou um gestor pode alterar o status. O solicitante nÃ£o pode alterar o status da prÃ³pria solicitaÃ§Ã£o.");
       return;
     }
     if ((patch.priority !== undefined || patch.ownerId !== undefined) && !isManager) {
-      setDataError("Somente gestores e administradores podem alterar a prioridade ou o responsável.");
+      setDataError("Somente gestores e administradores podem alterar a prioridade ou o responsÃ¡vel.");
       return;
     }
 
@@ -674,23 +679,23 @@ export default function Home() {
     }
   }
 
-  if (authLoading) return <div className="authScreen"><div className="authCard"><div className="brandMark"><Layers size={22}/></div><h1>Gestão de Demandas DelRio</h1><p>Verificando sua sessão...</p></div></div>;
-  if (!session) return <div className="authScreen"><form className="authCard" onSubmit={signIn}><div className="authBrand"><div className="brandMark"><Layers size={22}/></div><div><b>DELRIO</b><small>GESTÃO DE DEMANDAS</small></div></div><p className="eyebrow">AMBIENTE DE MARKETING</p><h1>Acesse sua conta</h1><p className="authSub">Entre com seu e-mail e senha cadastrados no sistema.</p><label>E-mail<input type="email" autoComplete="username" value={email} onChange={e=>setEmail(e.target.value)} placeholder="seuemail@delrio.com.br" required/></label><label>Senha<input type="password" autoComplete="current-password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Digite sua senha" required/></label>{loginError&&<div className="errorBox">{loginError}</div>}<button className="primary authSubmit" disabled={loginLoading}>{loginLoading?"Entrando...":"Entrar"}</button><small className="authFoot">Acesso restrito à equipe autorizada.</small></form></div>;
+  if (authLoading) return <div className="authScreen"><div className="authCard"><div className="brandMark"><Layers size={22}/></div><h1>GestÃ£o de Demandas DelRio</h1><p>Verificando sua sessÃ£o...</p></div></div>;
+  if (!session) return <div className="authScreen"><form className="authCard" onSubmit={signIn}><div className="authBrand"><div className="brandMark"><Layers size={22}/></div><div><b>DELRIO</b><small>GESTÃƒO DE DEMANDAS</small></div></div><p className="eyebrow">AMBIENTE DE MARKETING</p><h1>Acesse sua conta</h1><p className="authSub">Entre com seu e-mail e senha cadastrados no sistema.</p><label>E-mail<input type="email" autoComplete="username" value={email} onChange={e=>setEmail(e.target.value)} placeholder="seuemail@delrio.com.br" required/></label><label>Senha<input type="password" autoComplete="current-password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Digite sua senha" required/></label>{loginError&&<div className="errorBox">{loginError}</div>}<button className="primary authSubmit" disabled={loginLoading}>{loginLoading?"Entrando...":"Entrar"}</button><small className="authFoot">Acesso restrito Ã  equipe autorizada.</small></form></div>;
 
-  const nav = [["Dashboard",LayoutDashboard],["Solicitações",ClipboardList],["Pedidos de Materiais",ClipboardCheck],["Cronograma",CalendarDays],["Colaboradores",Users],["Estoque",Package],["Relatórios",BarChart3],["Configurações",Settings]] as const;
+  const nav = [["Dashboard",LayoutDashboard],["SolicitaÃ§Ãµes",ClipboardList],["Pedidos de Materiais",ClipboardCheck],["Cronograma",CalendarDays],["Colaboradores",Users],["Estoque",Package],["RelatÃ³rios",BarChart3],["ConfiguraÃ§Ãµes",Settings]] as const;
   return <main className="shell">
     <aside className={`sidebar ${mobileMenu?"open":""}`}>
-      <div className="brand"><div className="brandMark"><Layers size={21}/></div><div><b>DELRIO</b><small>GESTÃO DE DEMANDAS</small></div><button className="closeMenu" onClick={()=>setMobileMenu(false)}><X/></button></div>
+      <div className="brand"><div className="brandMark"><Layers size={21}/></div><div><b>DELRIO</b><small>GESTÃƒO DE DEMANDAS</small></div><button className="closeMenu" onClick={()=>setMobileMenu(false)}><X/></button></div>
       <div className="workspace"><span className="dot"/> Ambiente de Marketing <ChevronDown size={14}/></div><div className="navLabel">MENU PRINCIPAL</div>
-      {nav.map(([name,Icon])=><button key={name} className={`navItem ${active===name?"active":""}`} onClick={()=>{setActive(name);setMobileMenu(false);setSelected(null)}}><Icon size={18}/>{name}{name==="Solicitações"&&<span className="navCount">{tasks.length}</span>}</button>)}
-      <div className="sidebarBottom"><div className="userAvatar">{(profile?.full_name||"U").split(" ").map(x=>x[0]).slice(0,2).join("").toUpperCase()}</div><div><b>{profile?.full_name||"Usuário"}</b><small>{profile?.role==="admin"?"Administrador":profile?.role==="gestor"?"Gestor":"Colaborador"}</small></div><button className="logoutIcon" title="Sair" onClick={signOut}><LogOut size={16}/></button></div>
+      {nav.map(([name,Icon])=><button key={name} className={`navItem ${active===name?"active":""}`} onClick={()=>{setActive(name);setMobileMenu(false);setSelected(null)}}><Icon size={18}/>{name}{name==="SolicitaÃ§Ãµes"&&<span className="navCount">{tasks.length}</span>}</button>)}
+      <div className="sidebarBottom"><div className="userAvatar">{(profile?.full_name||"U").split(" ").map(x=>x[0]).slice(0,2).join("").toUpperCase()}</div><div><b>{profile?.full_name||"UsuÃ¡rio"}</b><small>{profile?.role==="admin"?"Administrador":profile?.role==="gestor"?"Gestor":"Colaborador"}</small></div><button className="logoutIcon" title="Sair" onClick={signOut}><LogOut size={16}/></button></div>
     </aside>
     <section className="main">
       <header className="topbar"><button className="menuButton" onClick={()=>setMobileMenu(true)}><Menu/></button><div className="crumb">Marketing <span>/</span> {active}</div><div className="topRight"><span className="online"><i/> {dataLoading?"Sincronizando":"Conectado ao Supabase"}</span><div className="userAvatar">{(profile?.full_name||"U").split(" ").map(x=>x[0]).slice(0,2).join("").toUpperCase()}</div></div></header>
       <div className="content">
         {dataError&&<div className="errorBanner"><span>{dataError}</span><button onClick={()=>session?.user&&loadData(session.user)}>Tentar novamente</button></div>}
         {active==="Dashboard" && <>
-          <div className="pageHeading"><div><p className="eyebrow">VISÃO GERAL</p><h1>Dashboard</h1><p className="sub">Acompanhe as demandas e a operação do Marketing DelRio.</p></div><button className="primary" onClick={()=>setShowNew(true)}><Plus size={17}/> Nova solicitação</button></div>
+          <div className="pageHeading"><div><p className="eyebrow">VISÃƒO GERAL</p><h1>Dashboard</h1><p className="sub">Acompanhe as demandas e a operaÃ§Ã£o do Marketing DelRio.</p></div><button className="primary" onClick={()=>setShowNew(true)}><Plus size={17}/> Nova solicitaÃ§Ã£o</button></div>
           <style>{`
             .dashFilterCard{padding:22px 24px;margin-bottom:18px;border:1px solid #e7e8ef;background:linear-gradient(135deg,#fff 0%,#fcfbff 100%);box-shadow:0 5px 18px rgba(31,24,55,.035)}
             .dashFilterTop{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:20px}
@@ -719,40 +724,40 @@ export default function Home() {
           `}</style>
           <section className="panel dashFilterCard">
             <div className="dashFilterTop">
-              <div className="dashFilterTitle"><span className="dashFilterIcon"><CalendarDays size={19}/></span><div><h3>Filtros do Dashboard</h3><p>Personalize a análise das solicitações por data e período.</p></div></div>
+              <div className="dashFilterTitle"><span className="dashFilterIcon"><CalendarDays size={19}/></span><div><h3>Filtros do Dashboard</h3><p>Personalize a anÃ¡lise das solicitaÃ§Ãµes por data e perÃ­odo.</p></div></div>
               <button className="dashClear" onClick={()=>{setDashboardPeriod("all");setDashboardDateMode("created");setDashboardStart("");setDashboardEnd("")}}>Limpar filtros</button>
             </div>
             <div className="dashFilterGrid">
-              <div><label className="dashFieldLabel" htmlFor="dashboard-date-mode">Considerar data</label><select id="dashboard-date-mode" className="dashDateSelect" value={dashboardDateMode} onChange={e=>setDashboardDateMode(e.target.value as "created"|"completed"|"due")}><option value="created">Data de abertura</option><option value="completed">Data de conclusão</option><option value="due">Data do prazo</option></select></div>
-              <div><span className="dashFieldLabel">Período de análise</span><div className="dashPeriodOptions">{[{value:"all",label:"Todo o período"},{value:"month",label:"Este mês"},{value:"30",label:"Últimos 30 dias"},{value:"90",label:"Últimos 90 dias"},{value:"year",label:"Este ano"},{value:"custom",label:"Personalizado"}].map(option=><button key={option.value} type="button" className={`dashPeriodButton ${dashboardPeriod===option.value?"active":""}`} aria-pressed={dashboardPeriod===option.value} onClick={()=>setDashboardPeriod(option.value)}>{option.label}</button>)}</div></div>
+              <div><label className="dashFieldLabel" htmlFor="dashboard-date-mode">Considerar data</label><select id="dashboard-date-mode" className="dashDateSelect" value={dashboardDateMode} onChange={e=>setDashboardDateMode(e.target.value as "created"|"completed"|"due")}><option value="created">Data de abertura</option><option value="completed">Data de conclusÃ£o</option><option value="due">Data do prazo</option></select></div>
+              <div><span className="dashFieldLabel">PerÃ­odo de anÃ¡lise</span><div className="dashPeriodOptions">{[{value:"all",label:"Todo o perÃ­odo"},{value:"month",label:"Este mÃªs"},{value:"30",label:"Ãšltimos 30 dias"},{value:"90",label:"Ãšltimos 90 dias"},{value:"year",label:"Este ano"},{value:"custom",label:"Personalizado"}].map(option=><button key={option.value} type="button" className={`dashPeriodButton ${dashboardPeriod===option.value?"active":""}`} aria-pressed={dashboardPeriod===option.value} onClick={()=>setDashboardPeriod(option.value)}>{option.label}</button>)}</div></div>
             </div>
             {dashboardPeriod==="custom"&&<div className="dashCustomDates"><div><label className="dashFieldLabel" htmlFor="dashboard-start">Data inicial</label><input id="dashboard-start" className="dashDateInput" type="date" value={dashboardStart} onChange={e=>setDashboardStart(e.target.value)}/></div><div><label className="dashFieldLabel" htmlFor="dashboard-end">Data final</label><input id="dashboard-end" className="dashDateInput" type="date" value={dashboardEnd} min={dashboardStart||undefined} onChange={e=>setDashboardEnd(e.target.value)}/></div></div>}
-            {dashboardPeriod==="custom"&&dashboardStart&&dashboardEnd&&dashboardStart>dashboardEnd&&<p className="dashFilterError">A data inicial não pode ser posterior à data final.</p>}
-            {dashboardDateMode==="completed"&&<p className="dashFilterNote">A análise por conclusão utiliza a data registrada quando a solicitação foi concluída. Solicitações concluídas antes da ativação desse registro podem não aparecer nesse filtro.</p>}
-            <div className="dashFilterBottom"><span className="dashFilterSummary"><CalendarDays size={14}/> Critério: <strong>{dashboardDateLabel}</strong></span><span className="dashFilterSummary">{dashboardTasks.length} solicitação(ões) no resultado</span></div>
+            {dashboardPeriod==="custom"&&dashboardStart&&dashboardEnd&&dashboardStart>dashboardEnd&&<p className="dashFilterError">A data inicial nÃ£o pode ser posterior Ã  data final.</p>}
+            {dashboardDateMode==="completed"&&<p className="dashFilterNote">A anÃ¡lise por conclusÃ£o utiliza a data registrada quando a solicitaÃ§Ã£o foi concluÃ­da. SolicitaÃ§Ãµes concluÃ­das antes da ativaÃ§Ã£o desse registro podem nÃ£o aparecer nesse filtro.</p>}
+            <div className="dashFilterBottom"><span className="dashFilterSummary"><CalendarDays size={14}/> CritÃ©rio: <strong>{dashboardDateLabel}</strong></span><span className="dashFilterSummary">{dashboardTasks.length} solicitaÃ§Ã£o(Ãµes) no resultado</span></div>
           </section>
-          <div className="stats"><Stat icon={<ClipboardList/>} label="Total de solicitações" value={dashboardTasks.length} tone="blue"/><Stat icon={<Activity/>} label="Em andamento" value={dashboardInProgress} tone="violet"/><Stat icon={<CheckCircle2/>} label="Concluídas" value={dashboardDone} tone="green"/><Stat icon={<AlertTriangle/>} label="Atrasadas" value={dashboardLate} tone="red"/></div>
-          <div className="gridMain"><div className="panel"><div className="panelHead"><div><h3>Solicitações recentes</h3><p>Demandas dentro do período selecionado</p></div><button className="textButton" onClick={()=>setActive("Solicitações")}>Ver todas <ArrowUpRight size={15}/></button></div><TaskTable tasks={[...dashboardTasks].sort((a,b)=>b.created.localeCompare(a.created)).slice(0,5)} onSelect={setSelected}/></div>
-            <div className="panel"><div className="panelHead"><div><h3>Distribuição por área</h3><p>Volume de solicitações no período</p></div></div><div className="areaBars">{areaNames.map(a=>{const n=dashboardTasks.filter(t=>t.area===a).length;return <div className="barRow" key={a}><div><span>{a}</span><b>{n}</b></div><div className="track"><i style={{width:`${dashboardTasks.length?n/dashboardTasks.length*100:0}%`}}/></div></div>})}</div></div></div>
+          <div className="stats"><Stat icon={<ClipboardList/>} label="Total de solicitaÃ§Ãµes" value={dashboardTasks.length} tone="blue"/><Stat icon={<Activity/>} label="Em andamento" value={dashboardInProgress} tone="violet"/><Stat icon={<CheckCircle2/>} label="ConcluÃ­das" value={dashboardDone} tone="green"/><Stat icon={<AlertTriangle/>} label="Atrasadas" value={dashboardLate} tone="red"/></div>
+          <div className="gridMain"><div className="panel"><div className="panelHead"><div><h3>SolicitaÃ§Ãµes recentes</h3><p>Demandas dentro do perÃ­odo selecionado</p></div><button className="textButton" onClick={()=>setActive("SolicitaÃ§Ãµes")}>Ver todas <ArrowUpRight size={15}/></button></div><TaskTable tasks={[...dashboardTasks].sort((a,b)=>b.created.localeCompare(a.created)).slice(0,5)} onSelect={setSelected}/></div>
+            <div className="panel"><div className="panelHead"><div><h3>DistribuiÃ§Ã£o por Ã¡rea</h3><p>Volume de solicitaÃ§Ãµes no perÃ­odo</p></div></div><div className="areaBars">{areaNames.map(a=>{const n=dashboardTasks.filter(t=>t.area===a).length;return <div className="barRow" key={a}><div><span>{a}</span><b>{n}</b></div><div className="track"><i style={{width:`${dashboardTasks.length?n/dashboardTasks.length*100:0}%`}}/></div></div>})}</div></div></div>
           <div className="panel" style={{marginBottom:18}}>
-            <div className="panelHead"><div><h3>Solicitações por colaborador</h3><p>Distribuição das demandas por responsável pela execução</p></div><span className="muted">{requestsByOwner.length} colaborador(es)</span></div>
-            {!requestsByOwner.length ? <div className="emptyTable">Ainda não há solicitações atribuídas a colaboradores.</div> : <div className="tableWrap"><table><thead><tr><th>Colaborador responsável</th><th>Total atribuídas</th><th>Em andamento</th><th>Concluídas</th><th>Atrasadas</th><th>Canceladas</th></tr></thead><tbody>
+            <div className="panelHead"><div><h3>SolicitaÃ§Ãµes por colaborador</h3><p>DistribuiÃ§Ã£o das demandas por responsÃ¡vel pela execuÃ§Ã£o</p></div><span className="muted">{requestsByOwner.length} colaborador(es)</span></div>
+            {!requestsByOwner.length ? <div className="emptyTable">Ainda nÃ£o hÃ¡ solicitaÃ§Ãµes atribuÃ­das a colaboradores.</div> : <div className="tableWrap"><table><thead><tr><th>Colaborador responsÃ¡vel</th><th>Total atribuÃ­das</th><th>Em andamento</th><th>ConcluÃ­das</th><th>Atrasadas</th><th>Canceladas</th></tr></thead><tbody>
               {requestsByOwner.map(person=><tr key={person.id}><td><b>{person.name}</b></td><td><b>{person.total}</b></td><td>{person.inProgress}</td><td>{person.done}</td><td>{person.late}</td><td>{person.cancelled}</td></tr>)}
             </tbody></table></div>}
           </div>
-          <div className="panel"><div className="panelHead"><div><h3>Próximos prazos</h3><p>Demandas que exigem acompanhamento</p></div><button className="textButton" onClick={()=>setActive("Cronograma")}>Abrir cronograma <ArrowUpRight size={15}/></button></div><TaskTable tasks={[...dashboardTasks].filter(t=>t.status!=="Concluída"&&t.status!=="Cancelada").sort((a,b)=>a.due.localeCompare(b.due)).slice(0,4)} onSelect={setSelected}/></div>
+          <div className="panel"><div className="panelHead"><div><h3>PrÃ³ximos prazos</h3><p>Demandas que exigem acompanhamento</p></div><button className="textButton" onClick={()=>setActive("Cronograma")}>Abrir cronograma <ArrowUpRight size={15}/></button></div><TaskTable tasks={[...dashboardTasks].filter(t=>t.status!=="ConcluÃ­da"&&t.status!=="Cancelada").sort((a,b)=>a.due.localeCompare(b.due)).slice(0,4)} onSelect={setSelected}/></div>
         </>}
-        {active==="Solicitações" && <><div className="pageHeading"><div><p className="eyebrow">GESTÃO OPERACIONAL</p><h1>Solicitações</h1><p className="sub">Cadastre, distribua e acompanhe as demandas.</p></div><button className="primary" onClick={()=>setShowNew(true)}><Plus size={17}/> Nova solicitação</button></div><div className="panel"><div className="toolbar" style={{flexWrap:"wrap",gap:12}}><div className="search"><Search size={17}/><input placeholder="Buscar por título, área, responsável ou status..." value={search} onChange={e=>setSearch(e.target.value)}/></div><label style={{minWidth:220}}>Filtrar por usuário responsável<select value={requestUserFilter} onChange={e=>setRequestUserFilter(e.target.value)}><option value="Todos">Todos os usuários</option>{requestUsers.map(([id,name])=><option key={id} value={id}>{name}</option>)}{tasks.some(t=>!t.ownerId)&&<option value="Sem responsável">Sem responsável</option>}</select></label><span className="muted">{filtered.length} registros</span></div><TaskTable tasks={filtered} onSelect={setSelected}/></div></>}
+        {active==="SolicitaÃ§Ãµes" && <><div className="pageHeading"><div><p className="eyebrow">GESTÃƒO OPERACIONAL</p><h1>SolicitaÃ§Ãµes</h1><p className="sub">Cadastre, distribua e acompanhe as demandas.</p></div><button className="primary" onClick={()=>setShowNew(true)}><Plus size={17}/> Nova solicitaÃ§Ã£o</button></div><div className="panel"><div className="toolbar" style={{flexWrap:"wrap",gap:12}}><div className="search"><Search size={17}/><input placeholder="Buscar por tÃ­tulo, Ã¡rea, responsÃ¡vel ou status..." value={search} onChange={e=>setSearch(e.target.value)}/></div><label style={{minWidth:220}}>Filtrar por usuÃ¡rio responsÃ¡vel<select value={requestUserFilter} onChange={e=>setRequestUserFilter(e.target.value)}><option value="Todos">Todos os usuÃ¡rios</option>{requestUsers.map(([id,name])=><option key={id} value={id}>{name}</option>)}{tasks.some(t=>!t.ownerId)&&<option value="Sem responsÃ¡vel">Sem responsÃ¡vel</option>}</select></label><span className="muted">{filtered.length} registros</span></div><TaskTable tasks={filtered} onSelect={setSelected}/></div></>}
         {active==="Pedidos de Materiais" && <>
-          <div className="pageHeading"><div><p className="eyebrow">SUPRIMENTOS INTERNOS</p><h1>Pedidos de Materiais</h1><p className="sub">Solicite materiais, acompanhe aprovações e consulte a separação e entrega.</p></div><div style={{display:"flex",gap:10,flexWrap:"wrap"}}><button className="secondary" onClick={loadMaterialOrders} disabled={ordersLoading}><RefreshCw size={15}/> Atualizar</button><button className="primary" onClick={()=>{setOrdersError("");setOrderAreaId(myOrderAreas.some(a=>a.id===profile?.area_id)?profile?.area_id||"":myOrderAreas[0]?.id||"");setShowNewMaterialOrder(true)}} disabled={!myOrderAreas.length}><Plus size={16}/> Novo pedido</button></div></div>
+          <div className="pageHeading"><div><p className="eyebrow">SUPRIMENTOS INTERNOS</p><h1>Pedidos de Materiais</h1><p className="sub">Solicite materiais, acompanhe aprovaÃ§Ãµes e consulte a separaÃ§Ã£o e entrega.</p></div><div style={{display:"flex",gap:10,flexWrap:"wrap"}}><button className="secondary" onClick={loadMaterialOrders} disabled={ordersLoading}><RefreshCw size={15}/> Atualizar</button><button className="primary" onClick={()=>{setOrdersError("");setOrderAreaId(myOrderAreas.some(a=>a.id===profile?.area_id)?profile?.area_id||"":myOrderAreas[0]?.id||"");setShowNewMaterialOrder(true)}} disabled={!myOrderAreas.length}><Plus size={16}/> Novo pedido</button></div></div>
           {ordersError&&<div className="errorBanner"><span>{ordersError}</span><button onClick={()=>setOrdersError("")}>Fechar</button></div>}
-          <div className="stats"><Stat icon={<ClipboardList/>} label="Pedidos visíveis" value={materialOrders.length} tone="blue"/><Stat icon={<Clock3/>} label="Aguardando gestor" value={pendingManagerOrders} tone="violet"/><Stat icon={<PackageCheck/>} label="Aguardando estoque" value={pendingStockOrders} tone="amber"/><Stat icon={<Layers/>} label="Em atendimento" value={activeMaterialOrders} tone="green"/></div>
-          <div className="panel"><div className="panelHead"><div><h3>Pedidos cadastrados</h3><p>Os pedidos exibidos respeitam as permissões de acesso do seu perfil.</p></div><span className="muted">{materialOrders.length} registro(s)</span></div>
-            {ordersLoading?<div className="emptyTable">Carregando pedidos de materiais...</div>:!materialOrders.length?<div className="emptyTable">Nenhum pedido de materiais encontrado. Use “Novo pedido” para registrar a primeira solicitação.</div>:<div className="tableWrap"><table><thead><tr><th>Pedido</th><th>Solicitante</th><th>Área</th><th>Necessário em</th><th>Itens</th><th>Status</th><th>Detalhes</th></tr></thead><tbody>{materialOrders.map(order=>{const count=materialOrderItems.filter(item=>item.order_id===order.id).length;return <tr key={order.id}><td><b>#{order.protocol}</b><span>{new Date(order.created_at).toLocaleDateString("pt-BR")}</span></td><td>{orderRequesterName(order.requester_id)}</td><td>{orderAreaName(order.area_id)}</td><td>{order.needed_by?new Date(order.needed_by+"T12:00:00").toLocaleDateString("pt-BR"):"—"}</td><td>{count} material(is)</td><td><span className={`status ${order.status==="concluido"?"green":order.status.startsWith("rejeitado")||order.status==="cancelado"?"red":order.status.includes("aguardando")?"amber":"blue"}`}>{orderStatusLabels[order.status]}</span></td><td><button className="textButton" onClick={()=>setSelectedMaterialOrder(selectedMaterialOrder===order.id?null:order.id)}>{selectedMaterialOrder===order.id?"Fechar":"Ver pedido"}</button></td></tr>})}</tbody></table></div>}
+          <div className="stats"><Stat icon={<ClipboardList/>} label="Pedidos visÃ­veis" value={materialOrders.length} tone="blue"/><Stat icon={<Clock3/>} label="Aguardando gestor" value={pendingManagerOrders} tone="violet"/><Stat icon={<PackageCheck/>} label="Aguardando estoque" value={pendingStockOrders} tone="amber"/><Stat icon={<Layers/>} label="Em atendimento" value={activeMaterialOrders} tone="green"/></div>
+          <div className="panel"><div className="panelHead"><div><h3>Pedidos cadastrados</h3><p>Os pedidos exibidos respeitam as permissÃµes de acesso do seu perfil.</p></div><span className="muted">{materialOrders.length} registro(s)</span></div>
+            {ordersLoading?<div className="emptyTable">Carregando pedidos de materiais...</div>:!materialOrders.length?<div className="emptyTable">Nenhum pedido de materiais encontrado. Use â€œNovo pedidoâ€ para registrar a primeira solicitaÃ§Ã£o.</div>:<div className="tableWrap"><table><thead><tr><th>Pedido</th><th>Solicitante</th><th>Ãrea</th><th>NecessÃ¡rio em</th><th>Itens</th><th>Status</th><th>Detalhes</th></tr></thead><tbody>{materialOrders.map(order=>{const count=materialOrderItems.filter(item=>item.order_id===order.id).length;return <tr key={order.id}><td><b>#{order.protocol}</b><span>{new Date(order.created_at).toLocaleDateString("pt-BR")}</span></td><td>{orderRequesterName(order.requester_id)}</td><td>{orderAreaName(order.area_id)}</td><td>{order.needed_by?new Date(order.needed_by+"T12:00:00").toLocaleDateString("pt-BR"):"â€”"}</td><td>{count} material(is)</td><td><span className={`status ${order.status==="concluido"?"green":order.status.startsWith("rejeitado")||order.status==="cancelado"?"red":order.status.includes("aguardando")?"amber":"blue"}`}>{orderStatusLabels[order.status]}</span></td><td><button className="textButton" onClick={()=>setSelectedMaterialOrder(selectedMaterialOrder===order.id?null:order.id)}>{selectedMaterialOrder===order.id?"Fechar":"Ver pedido"}</button></td></tr>})}</tbody></table></div>}
           </div>
-          {selectedOrder&&<div className="panel" style={{marginTop:18}}><div className="panelHead"><div><p className="eyebrow">PEDIDO #{selectedOrder.protocol}</p><h3>Detalhes do pedido</h3><p>{orderRequesterName(selectedOrder.requester_id)} · {orderAreaName(selectedOrder.area_id)} · Necessário em {selectedOrder.needed_by?new Date(selectedOrder.needed_by+"T12:00:00").toLocaleDateString("pt-BR"):"data não informada"}</p></div><button className="iconButton" onClick={()=>setSelectedMaterialOrder(null)}><X size={18}/></button></div>
+          {selectedOrder&&<div className="panel" style={{marginTop:18}}><div className="panelHead"><div><p className="eyebrow">PEDIDO #{selectedOrder.protocol}</p><h3>Detalhes do pedido</h3><p>{orderRequesterName(selectedOrder.requester_id)} Â· {orderAreaName(selectedOrder.area_id)} Â· NecessÃ¡rio em {selectedOrder.needed_by?new Date(selectedOrder.needed_by+"T12:00:00").toLocaleDateString("pt-BR"):"data nÃ£o informada"}</p></div><button className="iconButton" onClick={()=>setSelectedMaterialOrder(null)}><X size={18}/></button></div>
             <div className="notice"><b>Finalidade:</b> {selectedOrder.purpose}</div>
-            <div className="tableWrap" style={{marginTop:14}}><table><thead><tr><th>Material</th><th>Código</th><th>Quantidade solicitada</th><th>Unidade</th></tr></thead><tbody>{selectedOrderItems.map(item=><tr key={item.id}><td><b>{item.material?.name||"Material"}</b></td><td>{item.material?.sku||"—"}</td><td>{Number(item.quantity).toLocaleString("pt-BR")}</td><td>{item.material?.unit||"un"}</td></tr>)}</tbody></table></div>
+            <div className="tableWrap" style={{marginTop:14}}><table><thead><tr><th>Material</th><th>CÃ³digo</th><th>Quantidade solicitada</th><th>Unidade</th></tr></thead><tbody>{selectedOrderItems.map(item=><tr key={item.id}><td><b>{item.material?.name||"Material"}</b></td><td>{item.material?.sku||"â€”"}</td><td>{Number(item.quantity).toLocaleString("pt-BR")}</td><td>{item.material?.unit||"un"}</td></tr>)}</tbody></table></div>
             {selectedOrder.rejection_reason&&<div className="errorBox" style={{marginTop:14}}>Justificativa: {selectedOrder.rejection_reason}</div>}
             <div style={{display:"flex",gap:9,flexWrap:"wrap",marginTop:16}}>
               {selectedOrder.status==="aguardando_aprovacao_gestor"&&isManager&&<><button className="primary" disabled={ordersSaving} onClick={()=>runMaterialOrderAction("approve_material_order_manager",selectedOrder.id)}><CheckCircle2 size={15}/> Aprovar pedido</button><button className="secondary" disabled={ordersSaving} onClick={()=>runMaterialOrderAction("reject_material_order_manager",selectedOrder.id,true)}>Rejeitar pedido</button></>}
@@ -761,15 +766,15 @@ export default function Home() {
               {selectedOrder.status==="aguardando_retirada"&&canManageStock&&<button className="primary" disabled={ordersSaving} onClick={()=>runMaterialOrderAction("complete_material_order",selectedOrder.id)}><CheckCircle2 size={15}/> Confirmar entrega</button>}
               {canManageStock&&["em_separacao","aguardando_retirada"].includes(selectedOrder.status)&&<button className="secondary" disabled={ordersSaving} onClick={()=>runMaterialOrderAction("cancel_material_order",selectedOrder.id,true)}>Cancelar pedido</button>}
             </div>
-            <div style={{marginTop:22}}><div className="panelHead"><div><h3><History size={16} style={{display:"inline",verticalAlign:"-3px",marginRight:6}}/>Histórico do pedido</h3><p>Registro cronológico das aprovações e movimentações.</p></div></div>{!selectedOrderHistory.length?<div className="emptyTable">Nenhum evento registrado.</div>:<div className="timeline">{[...selectedOrderHistory].reverse().map(event=><div className="timelineItem" key={event.id}><div className="timelineInfo"><b>{event.details||event.action.replaceAll("_"," ")}</b><small>{event.actor_name||"Usuário"} · {new Date(event.created_at).toLocaleString("pt-BR")}</small></div>{event.new_status&&<span className="status blue">{orderStatusLabels[event.new_status as MaterialOrderStatus]||event.new_status}</span>}</div>)}</div>}</div>
+            <div style={{marginTop:22}}><div className="panelHead"><div><h3><History size={16} style={{display:"inline",verticalAlign:"-3px",marginRight:6}}/>HistÃ³rico do pedido</h3><p>Registro cronolÃ³gico das aprovaÃ§Ãµes e movimentaÃ§Ãµes.</p></div></div>{!selectedOrderHistory.length?<div className="emptyTable">Nenhum evento registrado.</div>:<div className="timeline">{[...selectedOrderHistory].reverse().map(event=><div className="timelineItem" key={event.id}><div className="timelineInfo"><b>{event.details||event.action.replaceAll("_"," ")}</b><small>{event.actor_name||"UsuÃ¡rio"} Â· {new Date(event.created_at).toLocaleString("pt-BR")}</small></div>{event.new_status&&<span className="status blue">{orderStatusLabels[event.new_status as MaterialOrderStatus]||event.new_status}</span>}</div>)}</div>}</div>
           </div>}
         </>}
         {active==="Cronograma" && <>
-          <div className="pageHeading"><div><p className="eyebrow">PLANEJAMENTO</p><h1>Cronograma da equipe</h1><p className="sub">Acompanhe prazos, responsáveis e andamento das entregas.</p></div></div>
+          <div className="pageHeading"><div><p className="eyebrow">PLANEJAMENTO</p><h1>Cronograma da equipe</h1><p className="sub">Acompanhe prazos, responsÃ¡veis e andamento das entregas.</p></div></div>
           <div className="stats" style={{marginBottom:18}}>
             <Stat icon={<AlertTriangle/>} label="Atrasadas" value={scheduleOverdueCount} tone="red"/>
             <Stat icon={<CalendarDays/>} label="Vencem hoje" value={scheduleTodayCount} tone="red"/>
-            <Stat icon={<Clock3/>} label="Próximos 7 dias" value={scheduleNextSevenCount} tone="violet"/>
+            <Stat icon={<Clock3/>} label="PrÃ³ximos 7 dias" value={scheduleNextSevenCount} tone="violet"/>
             <Stat icon={<ClipboardList/>} label="No cronograma" value={tasks.filter(t=>t.status!=="Cancelada").length} tone="blue"/>
           </div>
           <style>{`
@@ -793,59 +798,59 @@ export default function Home() {
           `}</style>
           <section className="panel scheduleFilterCard">
             <div className="scheduleFilterTop">
-              <div className="scheduleFilterTitle"><span className="scheduleFilterIcon"><CalendarDays size={19}/></span><div><h3>Filtros do cronograma</h3><p>Personalize a agenda por prazo, responsável, área e status.</p></div></div>
+              <div className="scheduleFilterTitle"><span className="scheduleFilterIcon"><CalendarDays size={19}/></span><div><h3>Filtros do cronograma</h3><p>Personalize a agenda por prazo, responsÃ¡vel, Ã¡rea e status.</p></div></div>
               <button className="scheduleFilterClear" onClick={()=>{setScheduleOwnerFilter("Todos");setScheduleAreaFilter("Todas");setScheduleStatusFilter("Todos");setSchedulePeriod("all");setScheduleStartDate("");setScheduleEndDate("")}}>Limpar filtros</button>
             </div>
             <div className="scheduleFilterGrid">
-              <div><label className="scheduleFieldLabel" htmlFor="schedule-period">Período</label><select id="schedule-period" className="scheduleSelect" value={schedulePeriod} onChange={e=>setSchedulePeriod(e.target.value)}><option value="all">Todos os prazos</option><option value="7">Próximos 7 dias</option><option value="30">Próximos 30 dias</option><option value="overdue">Somente atrasadas</option><option value="custom">Personalizado</option></select></div>
-              <div><label className="scheduleFieldLabel" htmlFor="schedule-owner">Responsável</label><select id="schedule-owner" className="scheduleSelect" value={scheduleOwnerFilter} onChange={e=>setScheduleOwnerFilter(e.target.value)}><option value="Todos">Todos os colaboradores</option>{requestUsers.map(([id,name])=><option key={id} value={id}>{name}</option>)}{tasks.some(t=>!t.ownerId)&&<option value="Sem responsável">Sem responsável</option>}</select></div>
-              <div><label className="scheduleFieldLabel" htmlFor="schedule-area">Área</label><select id="schedule-area" className="scheduleSelect" value={scheduleAreaFilter} onChange={e=>setScheduleAreaFilter(e.target.value)}><option value="Todas">Todas as áreas</option>{areas.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
-              <div><label className="scheduleFieldLabel" htmlFor="schedule-status">Status</label><select id="schedule-status" className="scheduleSelect" value={scheduleStatusFilter} onChange={e=>setScheduleStatusFilter(e.target.value)}><option value="Todos">Todos os status</option>{(["Recebida","Em análise","Aguardando aprovação","Em execução","Concluída","Cancelada"] as Status[]).map(st=><option key={st} value={st}>{st}</option>)}</select></div>
+              <div><label className="scheduleFieldLabel" htmlFor="schedule-period">PerÃ­odo</label><select id="schedule-period" className="scheduleSelect" value={schedulePeriod} onChange={e=>setSchedulePeriod(e.target.value)}><option value="all">Todos os prazos</option><option value="7">PrÃ³ximos 7 dias</option><option value="30">PrÃ³ximos 30 dias</option><option value="overdue">Somente atrasadas</option><option value="custom">Personalizado</option></select></div>
+              <div><label className="scheduleFieldLabel" htmlFor="schedule-owner">ResponsÃ¡vel</label><select id="schedule-owner" className="scheduleSelect" value={scheduleOwnerFilter} onChange={e=>setScheduleOwnerFilter(e.target.value)}><option value="Todos">Todos os colaboradores</option>{requestUsers.map(([id,name])=><option key={id} value={id}>{name}</option>)}{tasks.some(t=>!t.ownerId)&&<option value="Sem responsÃ¡vel">Sem responsÃ¡vel</option>}</select></div>
+              <div><label className="scheduleFieldLabel" htmlFor="schedule-area">Ãrea</label><select id="schedule-area" className="scheduleSelect" value={scheduleAreaFilter} onChange={e=>setScheduleAreaFilter(e.target.value)}><option value="Todas">Todas as Ã¡reas</option>{areas.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
+              <div><label className="scheduleFieldLabel" htmlFor="schedule-status">Status</label><select id="schedule-status" className="scheduleSelect" value={scheduleStatusFilter} onChange={e=>setScheduleStatusFilter(e.target.value)}><option value="Todos">Todos os status</option>{(["Recebida","Em anÃ¡lise","Aguardando aprovaÃ§Ã£o","Em execuÃ§Ã£o","ConcluÃ­da","Cancelada"] as Status[]).map(st=><option key={st} value={st}>{st}</option>)}</select></div>
               {schedulePeriod==="custom"&&<><div><label className="scheduleFieldLabel" htmlFor="schedule-start-date">Data inicial</label><input id="schedule-start-date" className="scheduleSelect" type="date" value={scheduleStartDate} onChange={e=>setScheduleStartDate(e.target.value)} max={scheduleEndDate||undefined}/></div><div><label className="scheduleFieldLabel" htmlFor="schedule-end-date">Data final</label><input id="schedule-end-date" className="scheduleSelect" type="date" value={scheduleEndDate} onChange={e=>setScheduleEndDate(e.target.value)} min={scheduleStartDate||undefined}/></div></>}
             </div>
-            <div className="scheduleFilterBottom"><span className="scheduleFilterSummary"><CalendarDays size={14}/> Visualização: <strong>{schedulePeriod==="all"?"Todos os prazos":schedulePeriod==="7"?"Próximos 7 dias":schedulePeriod==="30"?"Próximos 30 dias":schedulePeriod==="overdue"?"Somente atrasadas":`Personalizado${scheduleStartDate||scheduleEndDate?` · ${scheduleStartDate?new Date(scheduleStartDate+"T12:00:00").toLocaleDateString("pt-BR"):"início livre"} até ${scheduleEndDate?new Date(scheduleEndDate+"T12:00:00").toLocaleDateString("pt-BR"):"sem limite"}`:" · informe as datas"}`}</strong></span><span className="scheduleFilterSummary">{scheduleTasks.length} resultado(s)</span></div>
+            <div className="scheduleFilterBottom"><span className="scheduleFilterSummary"><CalendarDays size={14}/> VisualizaÃ§Ã£o: <strong>{schedulePeriod==="all"?"Todos os prazos":schedulePeriod==="7"?"PrÃ³ximos 7 dias":schedulePeriod==="30"?"PrÃ³ximos 30 dias":schedulePeriod==="overdue"?"Somente atrasadas":`Personalizado${scheduleStartDate||scheduleEndDate?` Â· ${scheduleStartDate?new Date(scheduleStartDate+"T12:00:00").toLocaleDateString("pt-BR"):"inÃ­cio livre"} atÃ© ${scheduleEndDate?new Date(scheduleEndDate+"T12:00:00").toLocaleDateString("pt-BR"):"sem limite"}`:" Â· informe as datas"}`}</strong></span><span className="scheduleFilterSummary">{scheduleTasks.length} resultado(s)</span></div>
           </section>
-          <div className="panel"><div className="panelHead"><div><h3>Agenda de entregas</h3><p>Ordenada pelo prazo mais próximo. Selecione uma demanda para abrir seus detalhes.</p></div></div>
-            <div className="timeline">{scheduleTasks.map(t=><button className="timelineItem" key={t.id} onClick={()=>setSelected(t)}><div className="dateBlock"><b>{t.due?.slice(8,10)||"—"}</b><small>{t.due?new Date(t.due+"T12:00:00").toLocaleDateString("pt-BR",{month:"short"}):"Sem prazo"}</small></div><div className="timelineInfo"><b>{t.title}</b><small>{t.owner} · {t.area} · #{t.protocol}</small></div><div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>{t.status!=="Concluída"&&t.status!=="Cancelada"&&t.due&&t.due<scheduleToday&&<span className="status red">Atrasada</span>}<StatusBadge status={t.status}/></div></button>)}{!scheduleTasks.length&&<div className="emptyTable">Nenhuma solicitação encontrada com os filtros selecionados.</div>}</div>
+          <div className="panel"><div className="panelHead"><div><h3>Agenda de entregas</h3><p>Ordenada pelo prazo mais prÃ³ximo. Selecione uma demanda para abrir seus detalhes.</p></div></div>
+            <div className="timeline">{scheduleTasks.map(t=><button className="timelineItem" key={t.id} onClick={()=>setSelected(t)}><div className="dateBlock"><b>{t.due?.slice(8,10)||"â€”"}</b><small>{t.due?new Date(t.due+"T12:00:00").toLocaleDateString("pt-BR",{month:"short"}):"Sem prazo"}</small></div><div className="timelineInfo"><b>{t.title}</b><small>{t.owner} Â· {t.area} Â· #{t.protocol}</small></div><div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>{t.status!=="ConcluÃ­da"&&t.status!=="Cancelada"&&t.due&&t.due<scheduleToday&&<span className="status red">Atrasada</span>}<StatusBadge status={t.status}/></div></button>)}{!scheduleTasks.length&&<div className="emptyTable">Nenhuma solicitaÃ§Ã£o encontrada com os filtros selecionados.</div>}</div>
           </div>
         </>}
-        {active==="Colaboradores" && <><div className="pageHeading"><div><p className="eyebrow">EQUIPE</p><h1>Colaboradores</h1><p className="sub">Gerencie áreas, perfis e situação dos usuários cadastrados.</p></div><button className="secondary" onClick={()=>session?.user&&loadData(session.user)}><RefreshCw size={15}/> Atualizar lista</button></div>
-          <div className="panel"><div className="panelHead"><div><h3>Equipe cadastrada</h3><p>{members.length} usuário(s) ativo(s) visível(is)</p></div></div>
-            {profile?.role==="admin"&&<div className="notice">Para adicionar uma pessoa, primeiro crie o usuário em Supabase → Authentication → Users → Add user. O banco cria o perfil automaticamente. Depois atualize esta lista para gerenciar sua área e função.</div>}
-            <div className="memberGrid">{members.map(m=><button className="memberCard memberButton" key={m.id} onClick={()=>{setSelectedMember(m);setMemberTaskStatus("Todas");setMemberForm({full_name:m.full_name,role:m.role,area_ids:m.area_ids||[],active:m.active,stock_manager:m.stock_manager===true});setMemberMessage("")}}><div className="userAvatar">{m.full_name.split(" ").map(x=>x[0]).slice(0,2).join("")}</div><b>{m.full_name}</b><small>{m.email||"Sem e-mail"}</small><small>{m.role==="admin"?"Administrador":m.role==="gestor"?"Gestor":"Colaborador"}</small><small>{(m.area_ids||[]).length ? areas.filter(a=>(m.area_ids||[]).includes(a.id)).map(a=>a.name).join(" · ") : "Área não definida"}</small><small>{m.role==="admin"?"Gerenciamento de estoque: acesso automático":m.stock_manager?"Gerencia estoque":"Sem permissão de estoque"}</small><span className="memberEdit">{profile?.role==="admin"?"Editar cadastro":"Visualizar cadastro"}</span></button>)}{!members.length&&<div className="emptyTable">Nenhum colaborador visível para este perfil.</div>}</div>
+        {active==="Colaboradores" && <><div className="pageHeading"><div><p className="eyebrow">EQUIPE</p><h1>Colaboradores</h1><p className="sub">Gerencie Ã¡reas, perfis e situaÃ§Ã£o dos usuÃ¡rios cadastrados.</p></div><button className="secondary" onClick={()=>session?.user&&loadData(session.user)}><RefreshCw size={15}/> Atualizar lista</button></div>
+          <div className="panel"><div className="panelHead"><div><h3>Equipe cadastrada</h3><p>{members.length} usuÃ¡rio(s) ativo(s) visÃ­vel(is)</p></div></div>
+            {profile?.role==="admin"&&<div className="notice">Para adicionar uma pessoa, primeiro crie o usuÃ¡rio em Supabase â†’ Authentication â†’ Users â†’ Add user. O banco cria o perfil automaticamente. Depois atualize esta lista para gerenciar sua Ã¡rea e funÃ§Ã£o.</div>}
+            <div className="memberGrid">{members.map(m=><button className="memberCard memberButton" key={m.id} onClick={()=>{setSelectedMember(m);setMemberTaskStatus("Todas");setMemberForm({full_name:m.full_name,role:m.role,area_ids:m.area_ids||[],active:m.active,stock_manager:m.stock_manager===true});setMemberMessage("")}}><div className="userAvatar">{m.full_name.split(" ").map(x=>x[0]).slice(0,2).join("")}</div><b>{m.full_name}</b><small>{m.email||"Sem e-mail"}</small><small>{m.role==="admin"?"Administrador":m.role==="gestor"?"Gestor":"Colaborador"}</small><small>{(m.area_ids||[]).length ? areas.filter(a=>(m.area_ids||[]).includes(a.id)).map(a=>a.name).join(" Â· ") : "Ãrea nÃ£o definida"}</small><small>{m.role==="admin"?"Gerenciamento de estoque: acesso automÃ¡tico":m.stock_manager?"Gerencia estoque":"Sem permissÃ£o de estoque"}</small><span className="memberEdit">{profile?.role==="admin"?"Editar cadastro":"Visualizar cadastro"}</span></button>)}{!members.length&&<div className="emptyTable">Nenhum colaborador visÃ­vel para este perfil.</div>}</div>
           </div></>}
         {active==="Estoque" && <>
           <div className="pageHeading">
-            <div><p className="eyebrow">MATERIAIS</p><h1>Estoque</h1><p className="sub">Controle de materiais promocionais, disponibilidade e movimentações.</p></div>
+            <div><p className="eyebrow">MATERIAIS</p><h1>Estoque</h1><p className="sub">Controle de materiais promocionais, disponibilidade e movimentaÃ§Ãµes.</p></div>
             {canManageStock && <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
               <button className="secondary" onClick={()=>loadStock()} disabled={stockLoading}><RefreshCw size={15}/> Atualizar</button>
               <button className="secondary" onClick={()=>setShowNewMaterial(true)}><Plus size={16}/> Novo material</button>
-              <button className="primary" onClick={()=>{setMovementForm(old=>({...old,material_id:old.material_id||stockMaterials[0]?.id||""}));setShowStockMovement(true)}} disabled={!stockMaterials.length}><ArrowUpRight size={16}/> Nova movimentação</button>
+              <button className="primary" onClick={()=>{setMovementForm(old=>({...old,material_id:old.material_id||stockMaterials[0]?.id||""}));setShowStockMovement(true)}} disabled={!stockMaterials.length}><ArrowUpRight size={16}/> Nova movimentaÃ§Ã£o</button>
             </div>}
           </div>
           {stockError && <div className="errorBanner"><span>{stockError}</span><button onClick={()=>setStockError("")}>Fechar</button></div>}
-          {!canManageStock && <div className="notice" style={{marginBottom:16}}>Você possui acesso de consulta ao estoque. Para cadastrar materiais ou registrar movimentações, solicite ao administrador a permissão “Gerenciar Estoque”.</div>}
+          {!canManageStock && <div className="notice" style={{marginBottom:16}}>VocÃª possui acesso de consulta ao estoque. Para cadastrar materiais ou registrar movimentaÃ§Ãµes, solicite ao administrador a permissÃ£o â€œGerenciar Estoqueâ€.</div>}
           {canManageStock && <div className="stats">
             <Stat icon={<Package/>} label="Materiais ativos" value={stockMaterials.length} tone="blue"/>
-            <Stat icon={<AlertTriangle/>} label="Abaixo do mínimo" value={stockMaterials.filter(m=>Number(m.quantity)-(reservedByMaterial[m.id]||0)<=Number(m.minimum_quantity)).length} tone="red"/>
+            <Stat icon={<AlertTriangle/>} label="Abaixo do mÃ­nimo" value={stockMaterials.filter(m=>Number(m.quantity)-(reservedByMaterial[m.id]||0)<=Number(m.minimum_quantity)).length} tone="red"/>
             <Stat icon={<Layers/>} label="Unidades reservadas" value={Object.values(reservedByMaterial).reduce((a,b)=>a+b,0)} tone="violet"/>
-            <Stat icon={<CheckCircle2/>} label="Com saldo disponível" value={stockMaterials.filter(m=>Number(m.quantity)-(reservedByMaterial[m.id]||0)>0).length} tone="green"/>
+            <Stat icon={<CheckCircle2/>} label="Com saldo disponÃ­vel" value={stockMaterials.filter(m=>Number(m.quantity)-(reservedByMaterial[m.id]||0)>0).length} tone="green"/>
           </div>}
           <div className="panel">
-            <div className="panelHead"><div><h3>Materiais cadastrados</h3><p>{canManageStock?"Estoque físico, reservas e saldo disponível.":"Consulta dos saldos físicos cadastrados."}</p></div><span className="muted">{filteredMaterials.length} material(is)</span></div>
+            <div className="panelHead"><div><h3>Materiais cadastrados</h3><p>{canManageStock?"Estoque fÃ­sico, reservas e saldo disponÃ­vel.":"Consulta dos saldos fÃ­sicos cadastrados."}</p></div><span className="muted">{filteredMaterials.length} material(is)</span></div>
             <div className="toolbar">
-              <div className="search"><Search size={17}/><input placeholder="Buscar material ou código..." value={stockSearch} onChange={e=>setStockSearch(e.target.value)}/></div>
+              <div className="search"><Search size={17}/><input placeholder="Buscar material ou cÃ³digo..." value={stockSearch} onChange={e=>setStockSearch(e.target.value)}/></div>
               <span className="muted">{stockLoading?"Carregando estoque...":`${stockMaterials.length} ativo(s)`}</span>
             </div>
-            {stockLoading ? <div className="emptyTable">Carregando materiais...</div> : !filteredMaterials.length ? <div className="emptyTable">Nenhum material cadastrado. {canManageStock?"Use “Novo material” para começar.":""}</div> :
-              <div className="tableWrap"><table><thead><tr><th>Material</th><th>Código</th><th>Estoque físico</th>{canManageStock&&<><th>Reservado</th><th>Disponível</th></>}<th>Estoque mínimo</th><th>Situação</th>{canManageStock&&<th>Ação</th>}</tr></thead><tbody>
+            {stockLoading ? <div className="emptyTable">Carregando materiais...</div> : !filteredMaterials.length ? <div className="emptyTable">Nenhum material cadastrado. {canManageStock?"Use â€œNovo materialâ€ para comeÃ§ar.":""}</div> :
+              <div className="tableWrap"><table><thead><tr><th>Material</th><th>CÃ³digo</th><th>Estoque fÃ­sico</th>{canManageStock&&<><th>Reservado</th><th>DisponÃ­vel</th></>}<th>Estoque mÃ­nimo</th><th>SituaÃ§Ã£o</th>{canManageStock&&<th>AÃ§Ã£o</th>}</tr></thead><tbody>
                 {filteredMaterials.map(m=>{
                   const reserved = reservedByMaterial[m.id] || 0;
                   const available = Number(m.quantity)-reserved;
                   const low = canManageStock && available <= Number(m.minimum_quantity);
                   return <tr key={m.id}>
                     <td><b>{m.name}</b>{m.description&&<span style={{display:"block",fontSize:12,color:"#667085",marginTop:3}}>{m.description}</span>}</td>
-                    <td>{m.sku||"—"}</td>
+                    <td>{m.sku||"â€”"}</td>
                     <td>{Number(m.quantity).toLocaleString("pt-BR",{maximumFractionDigits:2})} {m.unit}</td>
                     {canManageStock&&<><td>{reserved.toLocaleString("pt-BR",{maximumFractionDigits:2})} {m.unit}</td><td><b>{available.toLocaleString("pt-BR",{maximumFractionDigits:2})} {m.unit}</b></td></>}
                     <td>{Number(m.minimum_quantity).toLocaleString("pt-BR",{maximumFractionDigits:2})} {m.unit}</td>
@@ -856,27 +861,27 @@ export default function Home() {
               </tbody></table></div>}
           </div>
           {canManageStock && <div className="panel" style={{marginTop:18}}>
-            <div className="panelHead"><div><h3>Histórico de movimentações</h3><p>Registros preservados no banco de dados, do mais recente ao mais antigo.</p></div><span className="muted">{stockMovements.length} registro(s)</span></div>
-            {!stockMovements.length ? <div className="emptyTable">Nenhuma movimentação registrada.</div> :
-              <div className="tableWrap"><table><thead><tr><th>Data</th><th>Material</th><th>Tipo</th><th>Quantidade</th><th>Origem</th><th>Observações</th></tr></thead><tbody>
+            <div className="panelHead"><div><h3>HistÃ³rico de movimentaÃ§Ãµes</h3><p>Registros preservados no banco de dados, do mais recente ao mais antigo.</p></div><span className="muted">{stockMovements.length} registro(s)</span></div>
+            {!stockMovements.length ? <div className="emptyTable">Nenhuma movimentaÃ§Ã£o registrada.</div> :
+              <div className="tableWrap"><table><thead><tr><th>Data</th><th>Material</th><th>Tipo</th><th>Quantidade</th><th>Origem</th><th>ObservaÃ§Ãµes</th></tr></thead><tbody>
                 {stockMovements.map(m=>{
                   const material=stockMaterials.find(item=>item.id===m.material_id);
                   const request=tasks.find(item=>item.id===m.request_id);
-                  const labels:Record<string,string>={entrada:"Entrada",saida:"Saída",reserva:"Reserva",cancelamento_reserva:"Cancelamento de reserva",ajuste:"Ajuste"};
+                  const labels:Record<string,string>={entrada:"Entrada",saida:"SaÃ­da",reserva:"Reserva",cancelamento_reserva:"Cancelamento de reserva",ajuste:"Ajuste"};
                   return <tr key={m.id}>
                     <td>{new Date(m.created_at).toLocaleString("pt-BR")}</td>
-                    <td>{material?.name||"Material não encontrado"}</td>
+                    <td>{material?.name||"Material nÃ£o encontrado"}</td>
                     <td>{labels[m.movement_type]||m.movement_type}</td>
                     <td><b>{m.movement_type==="ajuste"&&Number(m.quantity)>0?"+":""}{Number(m.quantity).toLocaleString("pt-BR",{maximumFractionDigits:2})} {material?.unit||""}</b></td>
-                    <td>{request?`Solicitação #${request.protocol}`:m.material_order_id?"Pedido de materiais":"Movimentação manual"}</td>
-                    <td>{m.notes||"—"}</td>
+                    <td>{request?`SolicitaÃ§Ã£o #${request.protocol}`:m.material_order_id?"Pedido de materiais":"MovimentaÃ§Ã£o manual"}</td>
+                    <td>{m.notes||"â€”"}</td>
                   </tr>;
                 })}
               </tbody></table></div>}
           </div>}
         </>}
-        {active==="Relatórios" && <>
-          <div className="pageHeading"><div><p className="eyebrow">ANÁLISE GERENCIAL</p><h1>Relatórios</h1><p className="sub">Acompanhe resultados, produtividade e distribuição das demandas.</p></div></div>
+        {active==="RelatÃ³rios" && <>
+          <div className="pageHeading"><div><p className="eyebrow">ANÃLISE GERENCIAL</p><h1>RelatÃ³rios</h1><p className="sub">Acompanhe resultados, produtividade e distribuiÃ§Ã£o das demandas.</p></div></div>
           <style>{`
             .reportFilterCard{padding:22px 24px;margin-bottom:18px;border:1px solid #e7e8ef;background:linear-gradient(135deg,#fff 0%,#fcfbff 100%);box-shadow:0 5px 18px rgba(31,24,55,.035)}
             .reportFilterTop{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:20px}
@@ -895,31 +900,31 @@ export default function Home() {
             @media(max-width:600px){.reportFilterCard,.reportPanel{padding:18px}.reportCustomDates{grid-template-columns:1fr}.reportPeriodButton{flex:1 1 calc(50% - 7px)}}
           `}</style>
           <section className="panel reportFilterCard">
-            <div className="reportFilterTop"><div className="reportFilterTitle"><span className="reportFilterIcon"><CalendarDays size={19}/></span><div><h3>Filtros dos relatórios</h3><p>Selecione o período e refine os dados que deseja analisar.</p></div></div><button className="reportClear" onClick={()=>{setReportDateMode("created");setReportPeriod("all");setReportStartDate("");setReportEndDate("");setReportAreaFilter("Todas");setReportOwnerFilter("Todos");setReportStatusFilter("Todos")}}>Limpar filtros</button></div>
+            <div className="reportFilterTop"><div className="reportFilterTitle"><span className="reportFilterIcon"><CalendarDays size={19}/></span><div><h3>Filtros dos relatÃ³rios</h3><p>Selecione o perÃ­odo e refine os dados que deseja analisar.</p></div></div><button className="reportClear" onClick={()=>{setReportDateMode("created");setReportPeriod("all");setReportStartDate("");setReportEndDate("");setReportAreaFilter("Todas");setReportOwnerFilter("Todos");setReportStatusFilter("Todos")}}>Limpar filtros</button></div>
             <div className="reportFilterGrid">
-              <div><label className="reportFieldLabel" htmlFor="report-date-mode">Considerar data</label><select id="report-date-mode" className="reportSelect" value={reportDateMode} onChange={e=>setReportDateMode(e.target.value as "created"|"completed"|"due")}><option value="created">Data de abertura</option><option value="completed">Data de conclusão</option><option value="due">Data do prazo</option></select></div>
-              <div><label className="reportFieldLabel" htmlFor="report-area">Área</label><select id="report-area" className="reportSelect" value={reportAreaFilter} onChange={e=>setReportAreaFilter(e.target.value)}><option value="Todas">Todas as áreas</option>{areas.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
-              <div><label className="reportFieldLabel" htmlFor="report-owner">Responsável</label><select id="report-owner" className="reportSelect" value={reportOwnerFilter} onChange={e=>setReportOwnerFilter(e.target.value)}><option value="Todos">Todos os colaboradores</option>{requestUsers.map(([id,name])=><option key={id} value={id}>{name}</option>)}{tasks.some(t=>!t.ownerId)&&<option value="Sem responsável">Sem responsável</option>}</select></div>
-              <div><label className="reportFieldLabel" htmlFor="report-status">Status</label><select id="report-status" className="reportSelect" value={reportStatusFilter} onChange={e=>setReportStatusFilter(e.target.value)}><option value="Todos">Todos os status</option>{(["Recebida","Em análise","Aguardando aprovação","Em execução","Concluída","Cancelada"] as Status[]).map(status=><option key={status} value={status}>{status}</option>)}</select></div>
+              <div><label className="reportFieldLabel" htmlFor="report-date-mode">Considerar data</label><select id="report-date-mode" className="reportSelect" value={reportDateMode} onChange={e=>setReportDateMode(e.target.value as "created"|"completed"|"due")}><option value="created">Data de abertura</option><option value="completed">Data de conclusÃ£o</option><option value="due">Data do prazo</option></select></div>
+              <div><label className="reportFieldLabel" htmlFor="report-area">Ãrea</label><select id="report-area" className="reportSelect" value={reportAreaFilter} onChange={e=>setReportAreaFilter(e.target.value)}><option value="Todas">Todas as Ã¡reas</option>{areas.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
+              <div><label className="reportFieldLabel" htmlFor="report-owner">ResponsÃ¡vel</label><select id="report-owner" className="reportSelect" value={reportOwnerFilter} onChange={e=>setReportOwnerFilter(e.target.value)}><option value="Todos">Todos os colaboradores</option>{requestUsers.map(([id,name])=><option key={id} value={id}>{name}</option>)}{tasks.some(t=>!t.ownerId)&&<option value="Sem responsÃ¡vel">Sem responsÃ¡vel</option>}</select></div>
+              <div><label className="reportFieldLabel" htmlFor="report-status">Status</label><select id="report-status" className="reportSelect" value={reportStatusFilter} onChange={e=>setReportStatusFilter(e.target.value)}><option value="Todos">Todos os status</option>{(["Recebida","Em anÃ¡lise","Aguardando aprovaÃ§Ã£o","Em execuÃ§Ã£o","ConcluÃ­da","Cancelada"] as Status[]).map(status=><option key={status} value={status}>{status}</option>)}</select></div>
             </div>
-            <div style={{marginTop:17}}><span className="reportFieldLabel">Período de análise</span><div className="reportPeriodOptions">{[{value:"all",label:"Todo o período"},{value:"month",label:"Este mês"},{value:"30",label:"Últimos 30 dias"},{value:"90",label:"Últimos 90 dias"},{value:"year",label:"Este ano"},{value:"custom",label:"Personalizado"}].map(option=><button key={option.value} type="button" className={`reportPeriodButton ${reportPeriod===option.value?"active":""}`} aria-pressed={reportPeriod===option.value} onClick={()=>setReportPeriod(option.value)}>{option.label}</button>)}</div></div>
+            <div style={{marginTop:17}}><span className="reportFieldLabel">PerÃ­odo de anÃ¡lise</span><div className="reportPeriodOptions">{[{value:"all",label:"Todo o perÃ­odo"},{value:"month",label:"Este mÃªs"},{value:"30",label:"Ãšltimos 30 dias"},{value:"90",label:"Ãšltimos 90 dias"},{value:"year",label:"Este ano"},{value:"custom",label:"Personalizado"}].map(option=><button key={option.value} type="button" className={`reportPeriodButton ${reportPeriod===option.value?"active":""}`} aria-pressed={reportPeriod===option.value} onClick={()=>setReportPeriod(option.value)}>{option.label}</button>)}</div></div>
             {reportPeriod==="custom"&&<div className="reportCustomDates"><div><label className="reportFieldLabel" htmlFor="report-start">Data inicial</label><input id="report-start" className="reportDate" type="date" value={reportStartDate} onChange={e=>setReportStartDate(e.target.value)}/></div><div><label className="reportFieldLabel" htmlFor="report-end">Data final</label><input id="report-end" className="reportDate" type="date" min={reportStartDate||undefined} value={reportEndDate} onChange={e=>setReportEndDate(e.target.value)}/></div></div>}
-            {reportPeriod==="custom"&&reportStartDate&&reportEndDate&&reportStartDate>reportEndDate&&<p style={{color:"#b42318",fontSize:12,marginTop:10}}>A data inicial não pode ser posterior à data final.</p>}
-            {reportDateMode==="completed"&&<p className="dashFilterNote">A análise por conclusão utiliza a data registrada quando a solicitação foi concluída. Solicitações concluídas antes da ativação desse registro podem não aparecer nesse filtro.</p>}
-            <div className="reportFilterBottom"><span className="reportSummary"><CalendarDays size={14}/> Critério: <strong>{reportDateLabel}</strong></span><span className="reportSummary">{reportTasks.length} solicitação(ões) no resultado</span></div>
+            {reportPeriod==="custom"&&reportStartDate&&reportEndDate&&reportStartDate>reportEndDate&&<p style={{color:"#b42318",fontSize:12,marginTop:10}}>A data inicial nÃ£o pode ser posterior Ã  data final.</p>}
+            {reportDateMode==="completed"&&<p className="dashFilterNote">A anÃ¡lise por conclusÃ£o utiliza a data registrada quando a solicitaÃ§Ã£o foi concluÃ­da. SolicitaÃ§Ãµes concluÃ­das antes da ativaÃ§Ã£o desse registro podem nÃ£o aparecer nesse filtro.</p>}
+            <div className="reportFilterBottom"><span className="reportSummary"><CalendarDays size={14}/> CritÃ©rio: <strong>{reportDateLabel}</strong></span><span className="reportSummary">{reportTasks.length} solicitaÃ§Ã£o(Ãµes) no resultado</span></div>
           </section>
-          <div className="stats"><Stat icon={<ClipboardList/>} label="Total de solicitações" value={reportTasks.length} tone="blue"/><Stat icon={<CheckCircle2/>} label="Concluídas" value={reportDone} tone="green"/><Stat icon={<Clock3/>} label="Em andamento" value={reportInProgress} tone="violet"/><Stat icon={<AlertTriangle/>} label="Atrasadas" value={reportLate} tone="red"/></div>
+          <div className="stats"><Stat icon={<ClipboardList/>} label="Total de solicitaÃ§Ãµes" value={reportTasks.length} tone="blue"/><Stat icon={<CheckCircle2/>} label="ConcluÃ­das" value={reportDone} tone="green"/><Stat icon={<Clock3/>} label="Em andamento" value={reportInProgress} tone="violet"/><Stat icon={<AlertTriangle/>} label="Atrasadas" value={reportLate} tone="red"/></div>
           <div className="gridMain" style={{marginTop:18}}>
-            <section className="panel reportPanel"><div className="reportPanelHead"><div><h3>Distribuição por status</h3><p>Volume de solicitações em cada etapa</p></div></div><div className="reportBars">{(["Recebida","Em análise","Aguardando aprovação","Em execução","Concluída","Cancelada"] as Status[]).map(status=>{const count=reportTasks.filter(t=>t.status===status).length;return <div className="reportBarRow" key={status}><div><span>{status}</span><b>{count}</b></div><div className="reportBarTrack"><i style={{width:`${reportTasks.length?count/reportTasks.length*100:0}%`}}/></div></div>})}</div></section>
-            <section className="panel reportPanel"><div className="reportPanelHead"><div><h3>Distribuição por área</h3><p>Participação de cada área no volume total</p></div></div>{!reportByArea.length?<div className="emptyTable">Não há solicitações no período selecionado.</div>:<div className="reportBars">{reportByArea.map(item=><div className="reportBarRow" key={item.name}><div><span>{item.name}</span><b>{item.total}</b></div><div className="reportBarTrack"><i style={{width:`${reportTasks.length?item.total/reportTasks.length*100:0}%`}}/></div></div>)}</div>}</section>
+            <section className="panel reportPanel"><div className="reportPanelHead"><div><h3>DistribuiÃ§Ã£o por status</h3><p>Volume de solicitaÃ§Ãµes em cada etapa</p></div></div><div className="reportBars">{(["Recebida","Em anÃ¡lise","Aguardando aprovaÃ§Ã£o","Em execuÃ§Ã£o","ConcluÃ­da","Cancelada"] as Status[]).map(status=>{const count=reportTasks.filter(t=>t.status===status).length;return <div className="reportBarRow" key={status}><div><span>{status}</span><b>{count}</b></div><div className="reportBarTrack"><i style={{width:`${reportTasks.length?count/reportTasks.length*100:0}%`}}/></div></div>})}</div></section>
+            <section className="panel reportPanel"><div className="reportPanelHead"><div><h3>DistribuiÃ§Ã£o por Ã¡rea</h3><p>ParticipaÃ§Ã£o de cada Ã¡rea no volume total</p></div></div>{!reportByArea.length?<div className="emptyTable">NÃ£o hÃ¡ solicitaÃ§Ãµes no perÃ­odo selecionado.</div>:<div className="reportBars">{reportByArea.map(item=><div className="reportBarRow" key={item.name}><div><span>{item.name}</span><b>{item.total}</b></div><div className="reportBarTrack"><i style={{width:`${reportTasks.length?item.total/reportTasks.length*100:0}%`}}/></div></div>)}</div>}</section>
           </div>
           <div className="gridMain" style={{marginTop:18}}>
-            <section className="panel reportPanel"><div className="reportPanelHead"><div><h3>Desempenho da equipe</h3><p>Solicitações atribuídas por responsável</p></div></div>{!reportByOwner.length?<div className="emptyTable">Não há solicitações atribuídas no período.</div>:<div className="tableWrap"><table><thead><tr><th>Responsável</th><th>Total</th><th>Concluídas</th><th>Em andamento</th><th>Atrasadas</th></tr></thead><tbody>{reportByOwner.map(person=><tr key={person.id}><td><b>{person.name}</b></td><td>{person.total}</td><td>{person.done}</td><td>{person.inProgress}</td><td>{person.late}</td></tr>)}</tbody></table></div>}</section>
-            <section className="panel reportPanel"><div className="reportPanelHead"><div><h3>Taxa de conclusão</h3><p>Percentual de demandas concluídas no resultado filtrado</p></div></div><div className="reportRate"><strong>{reportCompletionRate}%</strong><span>{reportDone} de {reportCompletionBase} solicitações válidas concluídas</span></div><div className="reportBarTrack" style={{marginTop:16,height:12}}><i style={{display:"block",height:"100%",width:`${reportCompletionRate}%`,borderRadius:99,background:"linear-gradient(90deg,#9b5cdb,#7624c7)"}}/></div></section>
+            <section className="panel reportPanel"><div className="reportPanelHead"><div><h3>Desempenho da equipe</h3><p>SolicitaÃ§Ãµes atribuÃ­das por responsÃ¡vel</p></div></div>{!reportByOwner.length?<div className="emptyTable">NÃ£o hÃ¡ solicitaÃ§Ãµes atribuÃ­das no perÃ­odo.</div>:<div className="tableWrap"><table><thead><tr><th>ResponsÃ¡vel</th><th>Total</th><th>ConcluÃ­das</th><th>Em andamento</th><th>Atrasadas</th></tr></thead><tbody>{reportByOwner.map(person=><tr key={person.id}><td><b>{person.name}</b></td><td>{person.total}</td><td>{person.done}</td><td>{person.inProgress}</td><td>{person.late}</td></tr>)}</tbody></table></div>}</section>
+            <section className="panel reportPanel"><div className="reportPanelHead"><div><h3>Taxa de conclusÃ£o</h3><p>Percentual de demandas concluÃ­das no resultado filtrado</p></div></div><div className="reportRate"><strong>{reportCompletionRate}%</strong><span>{reportDone} de {reportCompletionBase} solicitaÃ§Ãµes vÃ¡lidas concluÃ­das</span></div><div className="reportBarTrack" style={{marginTop:16,height:12}}><i style={{display:"block",height:"100%",width:`${reportCompletionRate}%`,borderRadius:99,background:"linear-gradient(90deg,#9b5cdb,#7624c7)"}}/></div></section>
           </div>
-          <section className="panel reportPanel" style={{marginTop:18}}><div className="reportPanelHead"><div><h3>Detalhamento das solicitações</h3><p>Consulte os registros que compõem os indicadores acima.</p></div></div><TaskTable tasks={[...reportTasks].sort((a,b)=>b.created.localeCompare(a.created))} onSelect={setSelected}/></section>
+          <section className="panel reportPanel" style={{marginTop:18}}><div className="reportPanelHead"><div><h3>Detalhamento das solicitaÃ§Ãµes</h3><p>Consulte os registros que compÃµem os indicadores acima.</p></div></div><TaskTable tasks={[...reportTasks].sort((a,b)=>b.created.localeCompare(a.created))} onSelect={setSelected}/></section>
         </>}
-        {active==="Configurações" && <><div className="pageHeading"><div><p className="eyebrow">ADMINISTRAÇÃO</p><h1>Configurações</h1><p className="sub">Parâmetros do ambiente e sua conta.</p></div></div><div className="panel"><h3>Áreas cadastradas no Supabase</h3><div className="areaList">{areaNames.map(a=><div key={a}><Layers size={17}/>{a}<span>Ativa</span></div>)}</div><p className="notice">Usuário conectado: {profile?.email}. Perfil: {profile?.role}. A prioridade é controlada por gestores e administradores.</p></div></>}
+        {active==="ConfiguraÃ§Ãµes" && <><div className="pageHeading"><div><p className="eyebrow">ADMINISTRAÃ‡ÃƒO</p><h1>ConfiguraÃ§Ãµes</h1><p className="sub">ParÃ¢metros do ambiente e sua conta.</p></div></div><div className="panel"><h3>Ãreas cadastradas no Supabase</h3><div className="areaList">{areaNames.map(a=><div key={a}><Layers size={17}/>{a}<span>Ativa</span></div>)}</div><p className="notice">UsuÃ¡rio conectado: {profile?.email}. Perfil: {profile?.role}. A prioridade Ã© controlada por gestores e administradores.</p></div></>}
       </div>
     </section>
     {showNewMaterialOrder&&<div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setShowNewMaterialOrder(false)}}><div className="modal orderModal" style={{maxWidth:760}}>
@@ -938,70 +943,72 @@ export default function Home() {
         .orderModal .orderAddItem{white-space:nowrap}
         @media(max-width:600px){.orderModal .orderItemsHeader{align-items:flex-start;flex-direction:column}.orderModal .orderItemRow{grid-template-columns:minmax(0,1fr) 105px 38px;gap:8px;padding:10px}.orderModal .orderItemRemove{width:38px}}
       `}</style>
-      <div className="modalHead"><div><p className="eyebrow">NOVA SOLICITAÇÃO DE SUPRIMENTOS</p><h2>Novo pedido de materiais</h2><p>O pedido seguirá para aprovação do gestor e, depois, para aprovação do estoque.</p></div><button type="button" className="iconButton" onClick={()=>setShowNewMaterialOrder(false)}><X/></button></div>
-      <div className="formGrid"><label>Área solicitante<select value={orderAreaId} onChange={e=>setOrderAreaId(e.target.value)}>{myOrderAreas.map(area=><option key={area.id} value={area.id}>{area.name}</option>)}</select></label><label>Data necessária<input type="date" value={orderNeededBy} onChange={e=>setOrderNeededBy(e.target.value)} min={new Date().toISOString().slice(0,10)}/></label><label className="full">Finalidade do pedido<textarea rows={3} value={orderPurpose} onChange={e=>setOrderPurpose(e.target.value)} placeholder="Explique para qual ação, campanha ou necessidade os materiais serão utilizados..."/></label></div>
+      <div className="modalHead"><div><p className="eyebrow">NOVA SOLICITAÃ‡ÃƒO DE SUPRIMENTOS</p><h2>Novo pedido de materiais</h2><p>O pedido seguirÃ¡ para aprovaÃ§Ã£o do gestor e, depois, para aprovaÃ§Ã£o do estoque.</p></div><button type="button" className="iconButton" onClick={()=>setShowNewMaterialOrder(false)}><X/></button></div>
+      <div className="formGrid"><label>Ãrea solicitante<select value={orderAreaId} onChange={e=>setOrderAreaId(e.target.value)}>{myOrderAreas.map(area=><option key={area.id} value={area.id}>{area.name}</option>)}</select></label><label>Data necessÃ¡ria<input type="date" value={orderNeededBy} onChange={e=>setOrderNeededBy(e.target.value)} min={new Date().toISOString().slice(0,10)}/></label><label className="full">Finalidade do pedido<textarea rows={3} value={orderPurpose} onChange={e=>setOrderPurpose(e.target.value)} placeholder="Explique para qual aÃ§Ã£o, campanha ou necessidade os materiais serÃ£o utilizados..."/></label></div>
       <div style={{marginTop:20}}>
-        <div className="orderItemsHeader"><div><h3>Materiais solicitados</h3><p>Adicione cada material uma única vez e informe a quantidade desejada.</p></div><button type="button" className="secondary orderAddItem" onClick={()=>setOrderDraftItems(old=>[...old,{material_id:"",quantity:"1"}])}><Plus size={15}/> Adicionar item</button></div>
+        <div className="orderItemsHeader"><div><h3>Materiais solicitados</h3><p>Adicione cada material uma Ãºnica vez e informe a quantidade desejada.</p></div><button type="button" className="secondary orderAddItem" onClick={()=>setOrderDraftItems(old=>[...old,{material_id:"",quantity:"1"}])}><Plus size={15}/> Adicionar item</button></div>
         <div className="orderItemsList">{orderDraftItems.map((item,index)=><div className="orderItemRow" key={index}>
-          <label className="orderItemField">Material<select className="orderItemControl" value={item.material_id} onChange={e=>setOrderDraftItems(old=>old.map((row,i)=>i===index?{...row,material_id:e.target.value}:row))}><option value="">Selecione um material</option>{stockMaterials.filter(material=>!orderDraftItems.some((row,i)=>i!==index&&row.material_id===material.id)).map(material=><option key={material.id} value={material.id}>{material.name} · {material.unit}</option>)}</select></label>
+          <label className="orderItemField">Material<select className="orderItemControl" value={item.material_id} onChange={e=>setOrderDraftItems(old=>old.map((row,i)=>i===index?{...row,material_id:e.target.value}:row))}><option value="">Selecione um material</option>{stockMaterials.filter(material=>!orderDraftItems.some((row,i)=>i!==index&&row.material_id===material.id)).map(material=><option key={material.id} value={material.id}>{material.name} Â· {material.unit}</option>)}</select></label>
           <label className="orderItemField">Quantidade<input className="orderItemControl" type="number" min="0.01" step="0.01" value={item.quantity} onChange={e=>setOrderDraftItems(old=>old.map((row,i)=>i===index?{...row,quantity:e.target.value}:row))}/></label>
           <button type="button" className="orderItemRemove" title="Remover item" aria-label="Remover item" disabled={orderDraftItems.length===1} onClick={()=>setOrderDraftItems(old=>old.filter((_,i)=>i!==index))}><X size={17}/></button>
         </div>)}</div>
       </div>
       {ordersError&&<div className="errorBox" style={{marginTop:14}}>{ordersError}</div>}
-      <div className="modalActions"><button type="button" className="secondary" onClick={()=>setShowNewMaterialOrder(false)}>Cancelar</button><button type="button" className="primary" onClick={createMaterialOrder} disabled={ordersSaving||!stockMaterials.length||!orderAreaId}>{ordersSaving?"Enviando pedido...":"Enviar para aprovação"}</button></div>
+      <div className="modalActions"><button type="button" className="secondary" onClick={()=>setShowNewMaterialOrder(false)}>Cancelar</button><button type="button" className="primary" onClick={createMaterialOrder} disabled={ordersSaving||!stockMaterials.length||!orderAreaId}>{ordersSaving?"Enviando pedido...":"Enviar para aprovaÃ§Ã£o"}</button></div>
     </div></div>}
     {showNewMaterial&&<div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setShowNewMaterial(false)}}><div className="modal">
-      <div className="modalHead"><div><h2>Novo material</h2><p>O cadastro começa com estoque físico zero. A quantidade inicial será registrada como entrada.</p></div><button className="iconButton" onClick={()=>setShowNewMaterial(false)}><X/></button></div>
+      <div className="modalHead"><div><h2>Novo material</h2><p>O cadastro comeÃ§a com estoque fÃ­sico zero. A quantidade inicial serÃ¡ registrada como entrada.</p></div><button className="iconButton" onClick={()=>setShowNewMaterial(false)}><X/></button></div>
       <div className="formGrid">
         <label className="full">Nome do material<input value={materialForm.name} onChange={e=>setMaterialForm({...materialForm,name:e.target.value})} placeholder="Ex.: Sacola promocional"/></label>
-        <label>Código / SKU<input value={materialForm.sku} onChange={e=>setMaterialForm({...materialForm,sku:e.target.value})} placeholder="Opcional"/></label>
+        <label>CÃ³digo / SKU<input value={materialForm.sku} onChange={e=>setMaterialForm({...materialForm,sku:e.target.value})} placeholder="Opcional"/></label>
         <label>Unidade de medida<input value={materialForm.unit} onChange={e=>setMaterialForm({...materialForm,unit:e.target.value})} placeholder="un, pct, cx..."/></label>
-        <label>Estoque mínimo<input type="number" min="0" step="0.01" value={materialForm.minimum_quantity} onChange={e=>setMaterialForm({...materialForm,minimum_quantity:e.target.value})}/></label>
-        <label className="full">Descrição<textarea rows={3} value={materialForm.description} onChange={e=>setMaterialForm({...materialForm,description:e.target.value})} placeholder="Informações adicionais sobre o material..."/></label>
+        <label>Estoque mÃ­nimo<input type="number" min="0" step="0.01" value={materialForm.minimum_quantity} onChange={e=>setMaterialForm({...materialForm,minimum_quantity:e.target.value})}/></label>
+        <label className="full">DescriÃ§Ã£o<textarea rows={3} value={materialForm.description} onChange={e=>setMaterialForm({...materialForm,description:e.target.value})} placeholder="InformaÃ§Ãµes adicionais sobre o material..."/></label>
       </div>
-      <div className="notice" style={{marginTop:14}}>Estoque inicial: <b>0 {materialForm.unit||"un"}</b>. Para adicionar quantidade, registre uma movimentação do tipo Entrada após cadastrar.</div>
+      <div className="notice" style={{marginTop:14}}>Estoque inicial: <b>0 {materialForm.unit||"un"}</b>. Para adicionar quantidade, registre uma movimentaÃ§Ã£o do tipo Entrada apÃ³s cadastrar.</div>
       <div className="modalActions"><button className="secondary" onClick={()=>setShowNewMaterial(false)}>Cancelar</button><button className="primary" onClick={createMaterial} disabled={stockSaving||!materialForm.name.trim()}>{stockSaving?"Salvando...":"Cadastrar material"}</button></div>
     </div></div>}
     {showStockMovement&&<div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setShowStockMovement(false)}}><div className="modal">
-      <div className="modalHead"><div><h2>Nova movimentação</h2><p>Registre entradas, saídas ou ajustes físicos. Reservas são controladas em Pedidos de Materiais.</p></div><button className="iconButton" onClick={()=>setShowStockMovement(false)}><X/></button></div>
+      <div className="modalHead"><div><h2>Nova movimentaÃ§Ã£o</h2><p>Registre entradas, saÃ­das ou ajustes fÃ­sicos. Reservas sÃ£o controladas em Pedidos de Materiais.</p></div><button className="iconButton" onClick={()=>setShowStockMovement(false)}><X/></button></div>
       <div className="formGrid">
-        <label className="full">Material<select value={movementForm.material_id} onChange={e=>setMovementForm({...movementForm,material_id:e.target.value})}>{stockMaterials.map(m=><option key={m.id} value={m.id}>{m.name} · saldo físico: {Number(m.quantity).toLocaleString("pt-BR",{maximumFractionDigits:2})} {m.unit}</option>)}</select></label>
-        <label className="full">Tipo de movimentação<select value={movementForm.movement_type} onChange={e=>setMovementForm({...movementForm,movement_type:e.target.value as StockMovement["movement_type"],quantity:"",request_id:""})}>
-          <option value="entrada">Entrada — aumenta o estoque físico</option>
-          <option value="saida">Saída — reduz o estoque físico</option>
-              <option value="ajuste">Ajuste — informar o saldo físico contado</option>
+        <label className="full">Material<select value={movementForm.material_id} onChange={e=>setMovementForm({...movementForm,material_id:e.target.value})}>{stockMaterials.map(m=><option key={m.id} value={m.id}>{m.name} Â· saldo fÃ­sico: {Number(m.quantity).toLocaleString("pt-BR",{maximumFractionDigits:2})} {m.unit}</option>)}</select></label>
+        <label className="full">Tipo de movimentaÃ§Ã£o<select value={movementForm.movement_type} onChange={e=>setMovementForm({...movementForm,movement_type:e.target.value as StockMovement["movement_type"],quantity:"",request_id:""})}>
+          <option value="entrada">Entrada â€” aumenta o estoque fÃ­sico</option>
+          <option value="saida">SaÃ­da â€” reduz o estoque fÃ­sico</option>
+              <option value="ajuste">Ajuste â€” informar o saldo fÃ­sico contado</option>
         </select></label>
-        <label className="full">{movementForm.movement_type==="ajuste"?"Saldo físico contado":"Quantidade"}<input type="number" min={movementForm.movement_type==="ajuste"?"0":"0.01"} step="0.01" value={movementForm.quantity} onChange={e=>setMovementForm({...movementForm,quantity:e.target.value})} placeholder={movementForm.movement_type==="ajuste"?"Informe o saldo físico encontrado":"Informe a quantidade"}/></label>
-        <label className="full">Observações<textarea rows={3} value={movementForm.notes} onChange={e=>setMovementForm({...movementForm,notes:e.target.value})} placeholder="Motivo ou detalhes da movimentação..."/></label>
+        <label className="full">{movementForm.movement_type==="ajuste"?"Saldo fÃ­sico contado":"Quantidade"}<input type="number" min={movementForm.movement_type==="ajuste"?"0":"0.01"} step="0.01" value={movementForm.quantity} onChange={e=>setMovementForm({...movementForm,quantity:e.target.value})} placeholder={movementForm.movement_type==="ajuste"?"Informe o saldo fÃ­sico encontrado":"Informe a quantidade"}/></label>
+        <label className="full">ObservaÃ§Ãµes<textarea rows={3} value={movementForm.notes} onChange={e=>setMovementForm({...movementForm,notes:e.target.value})} placeholder="Motivo ou detalhes da movimentaÃ§Ã£o..."/></label>
       </div>
-      {movementForm.movement_type==="ajuste"&&<div className="notice" style={{marginTop:12}}>Informe o saldo físico total encontrado na contagem. O sistema calculará e registrará automaticamente a diferença.</div>}
-      <div className="modalActions"><button className="secondary" onClick={()=>setShowStockMovement(false)}>Cancelar</button><button className="primary" onClick={createStockMovement} disabled={stockSaving||!movementForm.material_id||movementForm.quantity===""}>{stockSaving?"Registrando...":"Registrar movimentação"}</button></div>
+      {movementForm.movement_type==="ajuste"&&<div className="notice" style={{marginTop:12}}>Informe o saldo fÃ­sico total encontrado na contagem. O sistema calcularÃ¡ e registrarÃ¡ automaticamente a diferenÃ§a.</div>}
+      <div className="modalActions"><button className="secondary" onClick={()=>setShowStockMovement(false)}>Cancelar</button><button className="primary" onClick={createStockMovement} disabled={stockSaving||!movementForm.material_id||movementForm.quantity===""}>{stockSaving?"Registrando...":"Registrar movimentaÃ§Ã£o"}</button></div>
     </div></div>}
-    {showNew&&<div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setShowNew(false)}}><div className="modal"><div className="modalHead"><div><h2>Nova solicitação</h2><p>Preencha os dados para registrar uma demanda.</p></div><button className="iconButton" onClick={()=>setShowNew(false)}><X/></button></div><div className="formGrid"><label className="full">Título da solicitação<input value={form.title} onChange={e=>setForm({...form,title:e.target.value})} placeholder="Ex.: Criar material para campanha"/></label><label>Área responsável<select value={form.areaId} onChange={e=>setForm({...form,areaId:e.target.value})}>{areas.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label><label>Responsável<select value={form.ownerId} onChange={e=>setForm({...form,ownerId:e.target.value})} disabled={areaMembers.length===1 || areaMembers.length===0}><option value="">{areaMembers.length===1?"Atribuído automaticamente":"Selecione um responsável"}</option>{areaMembers.map(m=><option key={m.profile_id} value={m.profile_id}>{m.full_name}</option>)}</select><small>{areaMembers.length===1?`Responsável definido automaticamente: ${areaMembers[0].full_name}.`:areaMembers.length>1?"Selecione um dos responsáveis disponíveis nesta área.":"Carregando responsáveis ou nenhum integrante ativo encontrado."}</small></label><label>Prioridade<select value={form.priority} disabled={!isManager} onChange={e=>setForm({...form,priority:e.target.value as Priority})}>{(["Baixa","Média","Alta","Urgente"] as Priority[]).map(p=><option key={p}>{p}</option>)}</select><small>{isManager?"Definida pelo gestor.":"A prioridade será definida pelo gestor."}</small></label><label>Prazo de entrega<input type="date" value={form.due} onChange={e=>setForm({...form,due:e.target.value})}/></label><label className="full">Descrição<textarea rows={4} value={form.description} onChange={e=>setForm({...form,description:e.target.value})} placeholder="Descreva o que precisa ser realizado..."/></label></div><div className="modalActions"><button className="secondary" onClick={()=>setShowNew(false)}>Cancelar</button><button className="primary" onClick={createTask} disabled={saving||!form.title.trim()||!form.due||!form.areaId||areaMembers.length===0||(areaMembers.length>1&&!form.ownerId)}>{saving?"Salvando...":"Criar solicitação"}</button></div></div></div>}
-    {selectedMember&&isManager&&<div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setSelectedMember(null)}}><div className="modal" style={{width:"96vw",maxWidth:"1600px",height:"94vh",maxHeight:"94vh",boxSizing:"border-box",overflowY:"auto",padding:"28px 32px"}}><div className="modalHead"><div><p className="eyebrow">GESTÃO DA EQUIPE</p><h2>{selectedMember.full_name}</h2><p>{selectedMember.email||"E-mail não informado"}</p></div><button className="iconButton" onClick={()=>setSelectedMember(null)}><X/></button></div>
-      {profile?.role==="admin"?<><div className="formGrid"><label className="full">Nome completo<input value={memberForm.full_name} onChange={e=>setMemberForm({...memberForm,full_name:e.target.value})}/></label><label>Perfil de acesso<select value={memberForm.role} onChange={e=>setMemberForm({...memberForm,role:e.target.value as Profile["role"]})}><option value="colaborador">Colaborador</option><option value="gestor">Gestor</option><option value="admin">Administrador</option></select></label><div className="full"><span style={{display:"block",fontWeight:600,marginBottom:10}}>Áreas vinculadas</span><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(210px,1fr))",gap:10,padding:14,border:"1px solid #dfe3eb",borderRadius:10}}>{areas.map(a=><label key={a.id} style={{display:"flex",alignItems:"center",gap:9,fontWeight:400,cursor:"pointer"}}><input type="checkbox" checked={memberForm.area_ids.includes(a.id)} onChange={e=>setMemberForm(old=>({...old,area_ids:e.target.checked?[...old.area_ids,a.id]:old.area_ids.filter(id=>id!==a.id)}))} style={{width:16,height:16,margin:0}}/>{a.name}</label>)}</div><small style={{display:"block",marginTop:7,color:"#667085"}}>Selecione uma ou mais áreas para este colaborador.</small></div><div className="full" style={{padding:14,border:"1px solid #dfe3eb",borderRadius:10}}><b style={{display:"block",marginBottom:8}}>Permissão de estoque</b>{memberForm.role==="admin"?<small>Administradores possuem acesso automático ao gerenciamento de estoque.</small>:<label style={{display:"flex",alignItems:"center",gap:9,fontWeight:400,cursor:"pointer"}}><input type="checkbox" checked={memberForm.stock_manager} onChange={e=>setMemberForm({...memberForm,stock_manager:e.target.checked})} style={{width:16,height:16,margin:0}}/>Gerenciar Estoque</label>}<small style={{display:"block",marginTop:7,color:"#667085"}}>Quando habilitada, a pessoa poderá cadastrar materiais e registrar movimentações de estoque.</small></div><label className="full">Situação<select value={memberForm.active?"true":"false"} onChange={e=>setMemberForm({...memberForm,active:e.target.value==="true"})}><option value="true">Ativo</option><option value="false">Inativo</option></select></label></div>{memberMessage&&<div className="errorBox" style={{marginTop:14}}>{memberMessage}</div>}<div className="modalActions"><button className="secondary" onClick={()=>setSelectedMember(null)}>Cancelar</button><button className="primary" onClick={saveMember} disabled={memberSaving||!memberForm.full_name.trim()}>{memberSaving?"Salvando...":"Salvar alterações"}</button></div></>:<><div className="detailGrid"><div><small>Perfil</small><b>{selectedMember.role}</b></div><div><small>Áreas</small><b>{(selectedMember.area_ids||[]).length ? areas.filter(a=>(selectedMember.area_ids||[]).includes(a.id)).map(a=>a.name).join(" · ") : "Não definidas"}</b></div></div><div className="modalActions"><button className="secondary" onClick={()=>setSelectedMember(null)}>Fechar</button></div></>}
+    {showNew&&<div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setShowNew(false)}}><div className="modal"><div className="modalHead"><div><h2>Nova solicitaÃ§Ã£o</h2><p>Preencha os dados para registrar uma demanda.</p></div><button className="iconButton" onClick={()=>setShowNew(false)}><X/></button></div><div className="formGrid"><label className="full">TÃ­tulo da solicitaÃ§Ã£o<input value={form.title} onChange={e=>setForm({...form,title:e.target.value})} placeholder="Ex.: Criar material para campanha"/></label><label>Ãrea responsÃ¡vel<select value={form.areaId} onChange={e=>setForm({...form,areaId:e.target.value})}>{areas.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label><label>ResponsÃ¡vel<select value={form.ownerId} onChange={e=>setForm({...form,ownerId:e.target.value})} disabled={areaMembers.length===1 || areaMembers.length===0}><option value="">{areaMembers.length===1?"AtribuÃ­do automaticamente":"Selecione um responsÃ¡vel"}</option>{areaMembers.map(m=><option key={m.profile_id} value={m.profile_id}>{m.full_name}</option>)}</select><small>{areaMembers.length===1?`ResponsÃ¡vel definido automaticamente: ${areaMembers[0].full_name}.`:areaMembers.length>1?"Selecione um dos responsÃ¡veis disponÃ­veis nesta Ã¡rea.":"Carregando responsÃ¡veis ou nenhum integrante ativo encontrado."}</small></label><label>Prioridade<select value={form.priority} disabled={!isManager} onChange={e=>setForm({...form,priority:e.target.value as Priority})}>{(["Baixa","MÃ©dia","Alta","Urgente"] as Priority[]).map(p=><option key={p}>{p}</option>)}</select><small>{isManager?"Definida pelo gestor.":"A prioridade serÃ¡ definida pelo gestor."}</small></label><label>Prazo de entrega<input type="date" value={form.due} onChange={e=>setForm({...form,due:e.target.value})}/></label><label className="full">DescriÃ§Ã£o<textarea rows={4} value={form.description} onChange={e=>setForm({...form,description:e.target.value})} placeholder="Descreva o que precisa ser realizado..."/></label></div><div className="modalActions"><button className="secondary" onClick={()=>setShowNew(false)}>Cancelar</button><button className="primary" onClick={createTask} disabled={saving||!form.title.trim()||!form.due||!form.areaId||areaMembers.length===0||(areaMembers.length>1&&!form.ownerId)}>{saving?"Salvando...":"Criar solicitaÃ§Ã£o"}</button></div></div></div>}
+    {selectedMember&&isManager&&<div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setSelectedMember(null)}}><div className="modal" style={{width:"96vw",maxWidth:"1600px",height:"94vh",maxHeight:"94vh",boxSizing:"border-box",overflowY:"auto",padding:"28px 32px"}}><div className="modalHead"><div><p className="eyebrow">GESTÃƒO DA EQUIPE</p><h2>{selectedMember.full_name}</h2><p>{selectedMember.email||"E-mail nÃ£o informado"}</p></div><button className="iconButton" onClick={()=>setSelectedMember(null)}><X/></button></div>
+      {profile?.role==="admin"?<><div className="formGrid"><label className="full">Nome completo<input value={memberForm.full_name} onChange={e=>setMemberForm({...memberForm,full_name:e.target.value})}/></label><label>Perfil de acesso<select value={memberForm.role} onChange={e=>setMemberForm({...memberForm,role:e.target.value as Profile["role"]})}><option value="colaborador">Colaborador</option><option value="gestor">Gestor</option><option value="admin">Administrador</option></select></label><div className="full"><span style={{display:"block",fontWeight:600,marginBottom:10}}>Ãreas vinculadas</span><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(210px,1fr))",gap:10,padding:14,border:"1px solid #dfe3eb",borderRadius:10}}>{areas.map(a=><label key={a.id} style={{display:"flex",alignItems:"center",gap:9,fontWeight:400,cursor:"pointer"}}><input type="checkbox" checked={memberForm.area_ids.includes(a.id)} onChange={e=>setMemberForm(old=>({...old,area_ids:e.target.checked?[...old.area_ids,a.id]:old.area_ids.filter(id=>id!==a.id)}))} style={{width:16,height:16,margin:0}}/>{a.name}</label>)}</div><small style={{display:"block",marginTop:7,color:"#667085"}}>Selecione uma ou mais Ã¡reas para este colaborador.</small></div><div className="full" style={{padding:14,border:"1px solid #dfe3eb",borderRadius:10}}><b style={{display:"block",marginBottom:8}}>PermissÃ£o de estoque</b>{memberForm.role==="admin"?<small>Administradores possuem acesso automÃ¡tico ao gerenciamento de estoque.</small>:<label style={{display:"flex",alignItems:"center",gap:9,fontWeight:400,cursor:"pointer"}}><input type="checkbox" checked={memberForm.stock_manager} onChange={e=>setMemberForm({...memberForm,stock_manager:e.target.checked})} style={{width:16,height:16,margin:0}}/>Gerenciar Estoque</label>}<small style={{display:"block",marginTop:7,color:"#667085"}}>Quando habilitada, a pessoa poderÃ¡ cadastrar materiais e registrar movimentaÃ§Ãµes de estoque.</small></div><label className="full">SituaÃ§Ã£o<select value={memberForm.active?"true":"false"} onChange={e=>setMemberForm({...memberForm,active:e.target.value==="true"})}><option value="true">Ativo</option><option value="false">Inativo</option></select></label></div>{memberMessage&&<div className="errorBox" style={{marginTop:14}}>{memberMessage}</div>}<div className="modalActions"><button className="secondary" onClick={()=>setSelectedMember(null)}>Cancelar</button><button className="primary" onClick={saveMember} disabled={memberSaving||!memberForm.full_name.trim()}>{memberSaving?"Salvando...":"Salvar alteraÃ§Ãµes"}</button></div></>:<><div className="detailGrid"><div><small>Perfil</small><b>{selectedMember.role}</b></div><div><small>Ãreas</small><b>{(selectedMember.area_ids||[]).length ? areas.filter(a=>(selectedMember.area_ids||[]).includes(a.id)).map(a=>a.name).join(" Â· ") : "NÃ£o definidas"}</b></div></div><div className="modalActions"><button className="secondary" onClick={()=>setSelectedMember(null)}>Fechar</button></div></>}
       <div className="panel" style={{marginTop:22}}>
-        <div className="panelHead"><div><h3>Demandas atribuídas</h3><p>Acompanhamento das atividades sob responsabilidade de {selectedMember.full_name}.</p></div><span className="muted">{selectedMemberTasks.length} demanda(s)</span></div>
+        <div className="panelHead"><div><h3>Demandas atribuÃ­das</h3><p>Acompanhamento das atividades sob responsabilidade de {selectedMember.full_name}.</p></div><span className="muted">{selectedMemberTasks.length} demanda(s)</span></div>
         <div className="stats" style={{gridTemplateColumns:"repeat(4,minmax(0,1fr))",marginBottom:18}}>
           <Stat icon={<ClipboardList/>} label="Total" value={selectedMemberTasks.length} tone="blue"/>
           <Stat icon={<Activity/>} label="Em andamento" value={memberTasksInProgress} tone="violet"/>
-          <Stat icon={<CheckCircle2/>} label="Concluídas" value={memberTasksDone} tone="green"/>
+          <Stat icon={<CheckCircle2/>} label="ConcluÃ­das" value={memberTasksDone} tone="green"/>
           <Stat icon={<AlertTriangle/>} label="Atrasadas" value={memberTasksLate} tone="red"/>
         </div>
-        <div className="toolbar"><div><b>Lista de demandas</b><p className="muted">Clique em uma demanda para abrir os detalhes e supervisionar o andamento.</p></div><label style={{minWidth:180}}>Filtrar por status<select value={memberTaskStatus} onChange={e=>setMemberTaskStatus(e.target.value)}><option value="Todas">Todos os status</option>{(["Recebida","Em análise","Aguardando aprovação","Em execução","Concluída","Cancelada"] as Status[]).map(status=><option key={status} value={status}>{status}</option>)}</select></label></div>
+        <div className="toolbar"><div><b>Lista de demandas</b><p className="muted">Clique em uma demanda para abrir os detalhes e supervisionar o andamento.</p></div><label style={{minWidth:180}}>Filtrar por status<select value={memberTaskStatus} onChange={e=>setMemberTaskStatus(e.target.value)}><option value="Todas">Todos os status</option>{(["Recebida","Em anÃ¡lise","Aguardando aprovaÃ§Ã£o","Em execuÃ§Ã£o","ConcluÃ­da","Cancelada"] as Status[]).map(status=><option key={status} value={status}>{status}</option>)}</select></label></div>
         <div style={{maxHeight:"48vh",overflowY:"auto",width:"100%"}}><TaskTable tasks={visibleMemberTasks} onSelect={task=>{setSelectedMember(null);setSelected(task)}}/></div>
       </div>
     </div></div>}
-    {selected&&<div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setSelected(null)}}><div className="modal"><div className="modalHead"><div><p className="eyebrow">PROTOCOLO #{selected.protocol}</p><h2>{selected.title}</h2><p>{selected.area} · Aberta em {new Date(selected.created+"T12:00:00").toLocaleDateString("pt-BR")}</p></div><button className="iconButton" onClick={()=>setSelected(null)}><X/></button></div><div className="detailGrid"><div><small>Responsável</small><b>{selected.owner}</b></div><div><small>Prazo</small><b>{new Date(selected.due+"T12:00:00").toLocaleDateString("pt-BR")}</b></div><div><small>Prioridade</small><b>{selected.priority}</b></div><div><small>Status atual</small><StatusBadge status={selected.status}/></div></div><p className="description">{selected.description||"Sem descrição adicional."}</p>{(isManager || (selected.ownerId===profile?.id && selected.requesterId!==profile?.id))?<label>Atualizar status<select value={selected.status} onChange={e=>{const nextStatus=e.target.value as Status;if(nextStatus==="Concluída"&&selected.status!=="Concluída"){setCompleteConfirm(true);return;}updateTask(selected,{status:nextStatus});}}>{(["Recebida","Em análise","Aguardando aprovação","Em execução","Concluída","Cancelada"] as Status[]).map(s=><option key={s}>{s}</option>)}</select></label>:<p className="notice">O status é atualizado pelo responsável pela demanda ou pela gestão. O solicitante pode acompanhar a solicitação, mas não alterar seu status.</p>}{completeConfirm&&<div style={{padding:14,marginTop:12,border:"1px solid #f5d08a",background:"#fffbeb",borderRadius:10}}><b style={{color:"#92400e"}}>Confirmar conclusão da solicitação?</b><p style={{margin:"6px 0 12px",fontSize:13,color:"#667085"}}>Ao confirmar, o sistema concluirá a solicitação e dará baixa automática no estoque físico dos materiais reservados. As reservas vinculadas serão encerradas e a movimentação ficará registrada no histórico.</p><div className="modalActions" style={{marginTop:0}}><button className="secondary" onClick={()=>setCompleteConfirm(false)}>Voltar</button><button className="primary" onClick={()=>updateTask(selected,{status:"Concluída"})}>Confirmar conclusão</button></div></div>}{isManager&&<><label>Responsável<select value={selected.ownerId||""} onChange={e=>updateTask(selected,{ownerId:e.target.value||null})}><option value="">Selecione um responsável</option>{selectedAreaMembers.map(m=><option key={m.profile_id} value={m.profile_id}>{m.full_name}</option>)}</select><small>Somente integrantes ativos da área {selected.area} podem ser atribuídos.</small></label><label>Prioridade<select value={selected.priority} onChange={e=>updateTask(selected,{priority:e.target.value as Priority})}>{(["Baixa","Média","Alta","Urgente"] as Priority[]).map(s=><option key={s}>{s}</option>)}</select></label></>}{(isManager || selected.requesterId===profile?.id)&&<div style={{marginTop:18}}>
+    {selected&&<div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setSelected(null)}}><div className="modal"><div className="modalHead"><div><p className="eyebrow">PROTOCOLO #{selected.protocol}</p><h2>{selected.title}</h2><p>{selected.area} Â· Aberta em {new Date(selected.created+"T12:00:00").toLocaleDateString("pt-BR")}</p></div><button className="iconButton" onClick={()=>setSelected(null)}><X/></button></div><div className="detailGrid"><div><small>ResponsÃ¡vel</small><b>{selected.owner}</b></div><div><small>Prazo</small><b>{new Date(selected.due+"T12:00:00").toLocaleDateString("pt-BR")}</b></div><div><small>Prioridade</small><b>{selected.priority}</b></div><div><small>Status atual</small><StatusBadge status={selected.status}/></div></div><p className="description">{selected.description||"Sem descriÃ§Ã£o adicional."}</p>{(isManager || (selected.ownerId===profile?.id && selected.requesterId!==profile?.id))?<label>Atualizar status<select value={selected.status} onChange={e=>{const nextStatus=e.target.value as Status;if(nextStatus==="ConcluÃ­da"&&selected.status!=="ConcluÃ­da"){setCompleteConfirm(true);return;}updateTask(selected,{status:nextStatus});}}>{(["Recebida","Em anÃ¡lise","Aguardando aprovaÃ§Ã£o","Em execuÃ§Ã£o","ConcluÃ­da","Cancelada"] as Status[]).map(s=><option key={s}>{s}</option>)}</select></label>:<p className="notice">O status Ã© atualizado pelo responsÃ¡vel pela demanda ou pela gestÃ£o. O solicitante pode acompanhar a solicitaÃ§Ã£o, mas nÃ£o alterar seu status.</p>}{completeConfirm&&<div style={{padding:14,marginTop:12,border:"1px solid #f5d08a",background:"#fffbeb",borderRadius:10}}><b style={{color:"#92400e"}}>Confirmar conclusÃ£o da solicitaÃ§Ã£o?</b><p style={{margin:"6px 0 12px",fontSize:13,color:"#667085"}}>Ao confirmar, o sistema concluirÃ¡ a solicitaÃ§Ã£o e darÃ¡ baixa automÃ¡tica no estoque fÃ­sico dos materiais reservados. As reservas vinculadas serÃ£o encerradas e a movimentaÃ§Ã£o ficarÃ¡ registrada no histÃ³rico.</p><div className="modalActions" style={{marginTop:0}}><button className="secondary" onClick={()=>setCompleteConfirm(false)}>Voltar</button><button className="primary" onClick={()=>updateTask(selected,{status:"ConcluÃ­da"})}>Confirmar conclusÃ£o</button></div></div>}{isManager&&<><label>ResponsÃ¡vel<select value={selected.ownerId||""} onChange={e=>updateTask(selected,{ownerId:e.target.value||null})}><option value="">Selecione um responsÃ¡vel</option>{selectedAreaMembers.map(m=><option key={m.profile_id} value={m.profile_id}>{m.full_name}</option>)}</select><small>Somente integrantes ativos da Ã¡rea {selected.area} podem ser atribuÃ­dos.</small></label><label>Prioridade<select value={selected.priority} onChange={e=>updateTask(selected,{priority:e.target.value as Priority})}>{(["Baixa","MÃ©dia","Alta","Urgente"] as Priority[]).map(s=><option key={s}>{s}</option>)}</select></label></>}{(isManager || selected.requesterId===profile?.id)&&<div style={{marginTop:18}}>
       {deleteConfirm ? <div style={{padding:14,border:"1px solid #fecaca",background:"#fff7f7",borderRadius:10}}>
-        <b style={{color:"#b42318"}}>Confirmar exclusão?</b>
-        <p style={{margin:"6px 0 12px",fontSize:13,color:"#667085"}}>A solicitação será retirada das listas, mas permanecerá preservada no histórico do banco de dados.</p>
-        <div className="modalActions" style={{marginTop:0}}><button className="secondary" onClick={()=>setDeleteConfirm(false)} disabled={deletingTask}>Cancelar</button><button onClick={()=>deleteTask(selected)} disabled={deletingTask} style={{background:"#b42318",color:"white",border:0,borderRadius:9,padding:"10px 16px",fontWeight:600,cursor:"pointer"}}>{deletingTask?"Excluindo...":"Confirmar exclusão"}</button></div>
-      </div> : <div className="modalActions"><button className="secondary" onClick={()=>setSelected(null)}>Fechar</button><button onClick={()=>setDeleteConfirm(true)} style={{background:"#fff",color:"#b42318",border:"1px solid #fda29b",borderRadius:9,padding:"10px 16px",fontWeight:600,cursor:"pointer"}}>Excluir solicitação</button></div>}
+        <b style={{color:"#b42318"}}>Confirmar exclusÃ£o?</b>
+        <p style={{margin:"6px 0 12px",fontSize:13,color:"#667085"}}>A solicitaÃ§Ã£o serÃ¡ retirada das listas, mas permanecerÃ¡ preservada no histÃ³rico do banco de dados.</p>
+        <div className="modalActions" style={{marginTop:0}}><button className="secondary" onClick={()=>setDeleteConfirm(false)} disabled={deletingTask}>Cancelar</button><button onClick={()=>deleteTask(selected)} disabled={deletingTask} style={{background:"#b42318",color:"white",border:0,borderRadius:9,padding:"10px 16px",fontWeight:600,cursor:"pointer"}}>{deletingTask?"Excluindo...":"Confirmar exclusÃ£o"}</button></div>
+      </div> : <div className="modalActions"><button className="secondary" onClick={()=>setSelected(null)}>Fechar</button><button onClick={()=>setDeleteConfirm(true)} style={{background:"#fff",color:"#b42318",border:"1px solid #fda29b",borderRadius:9,padding:"10px 16px",fontWeight:600,cursor:"pointer"}}>Excluir solicitaÃ§Ã£o</button></div>}
     </div>}{!isManager&&selected.requesterId!==profile?.id&&<div className="modalActions"><button className="secondary" onClick={()=>setSelected(null)}>Fechar</button></div>}{dataError&&<div className="errorBox" style={{marginTop:12}}>{dataError}</div>}</div></div>}
   </main>;
 }
 function Stat({icon,label,value,tone}:{icon:React.ReactNode,label:string,value:number,tone:string}) { return <div className="statCard"><div className={`statIcon ${tone}`}>{icon}</div><div><small>{label}</small><strong>{value}</strong></div></div>; }
 function StatusBadge({status}:{status:Status}) { return <span className={`status ${statusClass[status]}`}>{status}</span>; }
-function TaskTable({tasks,onSelect}:{tasks:Task[],onSelect:(t:Task)=>void}) { if(!tasks.length)return <div className="emptyTable">Nenhuma solicitação cadastrada no Supabase.</div>; return <div className="tableWrap"><table><thead><tr><th>Solicitação</th><th>Área</th><th>Responsável</th><th>Prioridade</th><th>Prazo</th><th>Status</th></tr></thead><tbody>{tasks.map(t=><tr key={t.id} onClick={()=>onSelect(t)}><td><b>#{t.protocol}</b><span>{t.title}</span></td><td>{t.area}</td><td>{t.owner}</td><td><span className={`priority ${t.priority.toLowerCase()}`}>{t.priority}</span></td><td>{new Date(t.due+"T12:00:00").toLocaleDateString("pt-BR")}</td><td><StatusBadge status={t.status}/></td></tr>)}</tbody></table></div>; }
+function TaskTable({tasks,onSelect}:{tasks:Task[],onSelect:(t:Task)=>void}) { if(!tasks.length)return <div className="emptyTable">Nenhuma solicitaÃ§Ã£o cadastrada no Supabase.</div>; return <div className="tableWrap"><table><thead><tr><th>SolicitaÃ§Ã£o</th><th>Ãrea</th><th>ResponsÃ¡vel</th><th>Prioridade</th><th>Prazo</th><th>Status</th></tr></thead><tbody>{tasks.map(t=><tr key={t.id} onClick={()=>onSelect(t)}><td><b>#{t.protocol}</b><span>{t.title}</span></td><td>{t.area}</td><td>{t.owner}</td><td><span className={`priority ${t.priority.toLowerCase()}`}>{t.priority}</span></td><td>{new Date(t.due+"T12:00:00").toLocaleDateString("pt-BR")}</td><td><StatusBadge status={t.status}/></td></tr>)}</tbody></table></div>; }
+
+
