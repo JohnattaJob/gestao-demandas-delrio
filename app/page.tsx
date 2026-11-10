@@ -1090,7 +1090,7 @@ export default function Home() {
                   </tr>;
                 })}
               </tbody></table></div>}
-          </div>}          </div>}
+          </div>}
         </>}
         {active==="RelatÃ³rios" && <>
           <div className="pageHeading" style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:16,flexWrap:"wrap"}}><div><p className="eyebrow">ANÃLISE GERENCIAL</p><h1>RelatÃ³rios</h1><p className="sub">Acompanhe resultados, produtividade e distribuiÃ§Ã£o das demandas.</p></div><button type="button" className="secondary" onClick={exportReports}><Download size={16}/> Exportar relatório</button></div>
