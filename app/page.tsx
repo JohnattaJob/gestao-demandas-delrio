@@ -391,7 +391,6 @@ export default function Home() {
   const reportAwaitingApproval = reportTasks.filter(t=>t.status==="Aguardando aprovaÃ§Ã£o").length;
   const reportExecuting = reportTasks.filter(t=>t.status==="Em execuÃ§Ã£o").length;
   const reportDone = reportTasks.filter(t=>t.status==="ConcluÃ­da").length;
-  const reportInProgress = reportAnalysis + reportAwaitingApproval + reportExecuting;
   const reportLate = reportTasks.filter(t=>t.status!=="ConcluÃ­da"&&t.status!=="Cancelada"&&t.due&&t.due<reportToday).length;
   const reportOpenBase = reportTasks.filter(t=>t.status!=="ConcluÃ­da"&&t.status!=="Cancelada").length;
   const reportOverdueRate = reportOpenBase ? Math.round(reportLate/reportOpenBase*100) : 0;
