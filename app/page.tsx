@@ -1056,12 +1056,23 @@ export default function Home() {
             <style>{`
               .stockReportFilters{padding:22px 24px;margin:18px 0;border:1px solid #e7e8ef;background:linear-gradient(135deg,#fff 0%,#fcfbff 100%);box-shadow:0 5px 18px rgba(31,24,55,.035)}
               .stockReportTop{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:20px}
-              .stockReportTitle{display:flex;align-items:center;gap:11px}.stockReportIcon{width:38px;height:38px;display:grid;place-items:center;border-radius:12px;background:#f2eaff;color:#7a1bd8;flex:none}
-              .stockReportTitle h3{margin:0 0 4px;font-size:15px;font-weight:700;color:#20202b}.stockReportTitle p{margin:0;font-size:12px;color:#858397}
+              .stockReportTitle{display:flex;align-items:center;gap:11px}
+              .stockReportIcon{width:38px;height:38px;display:grid;place-items:center;border-radius:12px;background:#f2eaff;color:#7a1bd8;flex:none}
+              .stockReportTitle h3{margin:0 0 4px;font-size:15px;font-weight:700;color:#20202b}
+              .stockReportTitle p{margin:0;font-size:12px;color:#858397}
+              .stockReportClear{border:0;background:transparent;color:#7624c7;font-size:12px;font-weight:700;padding:9px 10px;border-radius:8px;cursor:pointer;white-space:nowrap}
+              .stockReportClear:hover{background:#f5edff}
               .stockReportGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(185px,1fr));gap:14px;align-items:start}
+              .stockReportFieldLabel{display:block;margin:0 0 9px;color:#565568;font-size:11px;font-weight:700;letter-spacing:.035em;text-transform:uppercase}
+              .stockReportControl{width:100%;height:43px;border:1px solid #e1e2ea;border-radius:10px;background:#fff;padding:0 12px;color:#292837;font-size:13px;font-weight:500;font-family:inherit;outline:none;transition:border-color .15s,box-shadow .15s}
+              .stockReportControl:focus{border-color:#9b5cdb;box-shadow:0 0 0 3px rgba(122,27,216,.10)}
               .stockReportBottom{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:18px;padding-top:14px;border-top:1px solid #f0edf4;flex-wrap:wrap}
+              .stockReportSummary{display:flex;align-items:center;gap:8px;color:#777487;font-size:12px}
               .stockReportKpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px;margin:0 0 18px}
-              .stockReportPanel{padding:22px 24px}.stockReportPanelHead{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:18px}.stockReportPanelHead h3{margin:0 0 4px;font-size:15px}.stockReportPanelHead p{margin:0;color:#858397;font-size:12px}
+              .stockReportPanel{padding:22px 24px}
+              .stockReportPanelHead{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:18px}
+              .stockReportPanelHead h3{margin:0 0 4px;font-size:15px}
+              .stockReportPanelHead p{margin:0;color:#858397;font-size:12px}
               @media(max-width:1100px){.stockReportKpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
               @media(max-width:700px){.stockReportFilters,.stockReportPanel{padding:18px}.stockReportKpis{grid-template-columns:repeat(2,minmax(0,1fr))}.stockReportTop{flex-direction:column}}
               @media(max-width:420px){.stockReportKpis{grid-template-columns:1fr}}
@@ -1069,17 +1080,17 @@ export default function Home() {
             <section className="panel stockReportFilters">
               <div className="stockReportTop">
                 <div className="stockReportTitle"><span className="stockReportIcon"><CalendarDays size={19}/></span><div><h3>Relatório de movimentações</h3><p>Consulte e refine as entradas, saídas, ajustes e movimentações de reservas.</p></div></div>
-                <button className="reportClear" onClick={()=>{setStockReportMaterial("Todos");setStockReportType("Todos");setStockReportStart("");setStockReportEnd("")}}>Limpar filtros</button>
+                <button className="stockReportClear" onClick={()=>{setStockReportMaterial("Todos");setStockReportType("Todos");setStockReportStart("");setStockReportEnd("")}}>Limpar filtros</button>
               </div>
               <div className="stockReportGrid">
-                <div><label className="reportFieldLabel" htmlFor="stock-report-material">Material</label><select id="stock-report-material" className="reportSelect" value={stockReportMaterial} onChange={e=>setStockReportMaterial(e.target.value)}><option value="Todos">Todos os materiais</option>{stockMaterials.map(material=><option key={material.id} value={material.id}>{material.name}</option>)}</select></div>
-                <div><label className="reportFieldLabel" htmlFor="stock-report-type">Tipo de movimentação</label><select id="stock-report-type" className="reportSelect" value={stockReportType} onChange={e=>setStockReportType(e.target.value)}><option value="Todos">Todos os tipos</option><option value="entrada">Entrada</option><option value="saida">Saída</option><option value="ajuste">Ajuste</option><option value="reserva">Reserva</option><option value="cancelamento_reserva">Cancelamento de reserva</option></select></div>
-                <div><label className="reportFieldLabel" htmlFor="stock-report-start">Data inicial</label><input id="stock-report-start" className="reportDate" type="date" value={stockReportStart} max={stockReportEnd||undefined} onChange={e=>setStockReportStart(e.target.value)}/></div>
-                <div><label className="reportFieldLabel" htmlFor="stock-report-end">Data final</label><input id="stock-report-end" className="reportDate" type="date" value={stockReportEnd} min={stockReportStart||undefined} onChange={e=>setStockReportEnd(e.target.value)}/></div>
+                <div><label className="stockReportFieldLabel" htmlFor="stock-report-material">Material</label><select id="stock-report-material" className="stockReportControl" value={stockReportMaterial} onChange={e=>setStockReportMaterial(e.target.value)}><option value="Todos">Todos os materiais</option>{stockMaterials.map(material=><option key={material.id} value={material.id}>{material.name}</option>)}</select></div>
+                <div><label className="stockReportFieldLabel" htmlFor="stock-report-type">Tipo de movimentação</label><select id="stock-report-type" className="stockReportControl" value={stockReportType} onChange={e=>setStockReportType(e.target.value)}><option value="Todos">Todos os tipos</option><option value="entrada">Entrada</option><option value="saida">Saída</option><option value="ajuste">Ajuste</option><option value="reserva">Reserva</option><option value="cancelamento_reserva">Cancelamento de reserva</option></select></div>
+                <div><label className="stockReportFieldLabel" htmlFor="stock-report-start">Data inicial</label><input id="stock-report-start" className="stockReportControl" type="date" value={stockReportStart} max={stockReportEnd||undefined} onChange={e=>setStockReportStart(e.target.value)}/></div>
+                <div><label className="stockReportFieldLabel" htmlFor="stock-report-end">Data final</label><input id="stock-report-end" className="stockReportControl" type="date" value={stockReportEnd} min={stockReportStart||undefined} onChange={e=>setStockReportEnd(e.target.value)}/></div>
               </div>
               <div className="stockReportBottom">
-                <span className="reportSummary"><CalendarDays size={14}/> {filteredStockMovements.length} movimentação(ões) no resultado</span>
-                <span className="reportSummary">Período personalizado conforme as datas selecionadas</span>
+                <span className="stockReportSummary"><CalendarDays size={14}/> {filteredStockMovements.length} movimentação(ões) no resultado</span>
+                <span className="stockReportSummary">Período personalizado conforme as datas selecionadas</span>
               </div>
             </section>
             <div className="stockReportKpis">
