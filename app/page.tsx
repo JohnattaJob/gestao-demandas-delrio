@@ -496,6 +496,19 @@ export default function Home() {
     });
     return totals;
   },[stockMovements]);
+  const stockMovementSummary = useMemo(() => {
+    const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    const recent = stockMovements.filter(m => new Date(m.created_at).getTime() >= cutoff);
+    const count = (type: StockMovement["movement_type"]) => recent.filter(m => m.movement_type === type).length;
+    return {
+      total: recent.length,
+      entries: count("entrada"),
+      exits: count("saida"),
+      reservations: count("reserva"),
+      reservationCancellations: count("cancelamento_reserva"),
+      adjustments: count("ajuste")
+    };
+  },[stockMovements]);
   const myOrderAreas = profile?.role === "admin" ? areas : areas.filter(area => (profile?.area_ids||[]).includes(area.id) || profile?.area_id === area.id);
   const orderAreaName = (id:string) => areas.find(area=>area.id===id)?.name || "Ãrea nÃ£o identificada";
   const orderRequesterName = (id:string) => members.find(member=>member.id===id)?.full_name || (id===profile?.id?profile.full_name:"Solicitante");
@@ -907,12 +920,24 @@ export default function Home() {
           </div>
           {stockError && <div className="errorBanner"><span>{stockError}</span><button onClick={()=>setStockError("")}>Fechar</button></div>}
           {!canManageStock && <div className="notice" style={{marginBottom:16}}>VocÃª possui acesso de consulta ao estoque. Para cadastrar materiais ou registrar movimentaÃ§Ãµes, solicite ao administrador a permissÃ£o â€œGerenciar Estoqueâ€.</div>}
-          {canManageStock && <div className="stats">
-            <Stat icon={<Package/>} label="Materiais ativos" value={stockMaterials.length} tone="blue"/>
-            <Stat icon={<AlertTriangle/>} label="Abaixo do mÃ­nimo" value={stockMaterials.filter(m=>Number(m.quantity)-(reservedByMaterial[m.id]||0)<=Number(m.minimum_quantity)).length} tone="red"/>
-            <Stat icon={<Layers/>} label="Unidades reservadas" value={Object.values(reservedByMaterial).reduce((a,b)=>a+b,0)} tone="violet"/>
-            <Stat icon={<CheckCircle2/>} label="Com saldo disponÃ­vel" value={stockMaterials.filter(m=>Number(m.quantity)-(reservedByMaterial[m.id]||0)>0).length} tone="green"/>
-          </div>}
+          {canManageStock && <>
+            <div className="stats">
+              <Stat icon={<Package/>} label="Materiais ativos" value={stockMaterials.length} tone="blue"/>
+              <Stat icon={<AlertTriangle/>} label="Abaixo do mÃ­nimo" value={stockMaterials.filter(m=>Number(m.quantity)-(reservedByMaterial[m.id]||0)<=Number(m.minimum_quantity)).length} tone="red"/>
+              <Stat icon={<Layers/>} label="Materiais com reserva" value={stockMaterials.filter(m=>(reservedByMaterial[m.id]||0)>0).length} tone="violet"/>
+              <Stat icon={<CheckCircle2/>} label="Com saldo disponÃ­vel" value={stockMaterials.filter(m=>Number(m.quantity)-(reservedByMaterial[m.id]||0)>0).length} tone="green"/>
+            </div>
+            <div className="panel" style={{marginTop:18}}>
+              <div className="panelHead"><div><h3>MovimentaÃ§Ãµes dos Ãºltimos 30 dias</h3><p>Quantidade de registros por tipo de movimentaÃ§Ã£o no perÃ­odo.</p></div><span className="muted">{stockMovementSummary.total} registro(s)</span></div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(145px,1fr))",gap:12}}>
+                <Stat icon={<ArrowUpRight/>} label="Entradas" value={stockMovementSummary.entries} tone="green"/>
+                <Stat icon={<Activity/>} label="SaÃ­das" value={stockMovementSummary.exits} tone="blue"/>
+                <Stat icon={<Layers/>} label="Reservas" value={stockMovementSummary.reservations} tone="violet"/>
+                <Stat icon={<RefreshCw/>} label="Cancelamentos de reserva" value={stockMovementSummary.reservationCancellations} tone="orange"/>
+                <Stat icon={<History/>} label="Ajustes" value={stockMovementSummary.adjustments} tone="gray"/>
+              </div>
+            </div>
+          </>}
           <div className="panel">
             <div className="panelHead"><div><h3>Materiais cadastrados</h3><p>{canManageStock?"Estoque fÃ­sico, reservas e saldo disponÃ­vel.":"Consulta dos saldos fÃ­sicos cadastrados."}</p></div><span className="muted">{filteredMaterials.length} material(is)</span></div>
             <div className="toolbar">
