@@ -370,7 +370,7 @@ export default function Home() {
         const {data} = await supabase.storage.from("material-images").createSignedUrl(m.image_path!,3600);
         return data?.signedUrl ? [m.id,data.signedUrl] as const : null;
       }));
-      setMaterialImageUrls(Object.fromEntries(signedImages.filter((item):item is readonly [string,string]=>item!==null));
+      setMaterialImageUrls(Object.fromEntries(signedImages.filter((item):item is readonly [string,string]=>item!==null)));
 
       if (canManageStock) {
         const { data: movementsData, error: movementsError } = await supabase
@@ -892,6 +892,7 @@ export default function Home() {
     setStockSaving(true);
     setStockError("");
     let uploadedPath:string|null = null;
+    let materialSaved = false;
     try {
       if (materialImageFile) {
         const targetId = editingMaterialId || crypto.randomUUID();
@@ -911,6 +912,7 @@ export default function Home() {
           image_path:nextImagePath
         }).eq("id",editingMaterialId);
         if (error) throw error;
+        materialSaved = true;
         if (uploadedPath && current.image_path) await supabase.storage.from("material-images").remove([current.image_path]);
         if (removeMaterialImage && current.image_path) await supabase.storage.from("material-images").remove([current.image_path]);
       } else {
@@ -925,6 +927,7 @@ export default function Home() {
           image_path:uploadedPath
         });
         if (error) throw error;
+        materialSaved = true;
       }
 
       setShowNewMaterial(false);
@@ -935,7 +938,7 @@ export default function Home() {
       setMaterialForm({name:"",sku:"",description:"",unit:"un",minimum_quantity:"0"});
       await loadStock();
     } catch (error:any) {
-      if (uploadedPath) await supabase.storage.from("material-images").remove([uploadedPath]);
+      if (uploadedPath && !materialSaved) await supabase.storage.from("material-images").remove([uploadedPath]);
       setStockError(error.message || "Não foi possível salvar o material.");
     } finally {
       setStockSaving(false);
@@ -1510,7 +1513,7 @@ export default function Home() {
         <label>Unidade de medida<input value={materialForm.unit} onChange={e=>setMaterialForm({...materialForm,unit:e.target.value})} placeholder="un, pct, cx..."/></label>
         <label>Estoque mínimo<input type="number" min="0" step="0.01" value={materialForm.minimum_quantity} onChange={e=>setMaterialForm({...materialForm,minimum_quantity:e.target.value})}/></label></>}
         <label className="full">Descrição<textarea rows={3} value={materialForm.description} onChange={e=>setMaterialForm({...materialForm,description:e.target.value})} placeholder="Informações adicionais sobre o material..."/></label>
-        <label className="full">Imagem do material<input type="file" accept="image/jpeg,image/png,image/webp" onChange={e=>{const file=e.target.files?.[0]||null;if(file){if(file.size>5*1024*1024){setStockError("A imagem deve ter no máximo 5 MB.");e.currentTarget.value="";return;}setMaterialImageFile(file);setMaterialImagePreview(URL.createObjectURL(file));setRemoveMaterialImage(false);}}}/><small>JPG, PNG ou WebP. Tamanho máximo: 5 MB.</small></label>
+        <label className="full">Imagem do material<input type="file" accept="image/jpeg,image/png,image/webp" onChange={e=>{const file=e.target.files?.[0]||null;if(file){if(!["image/jpeg","image/png","image/webp"].includes(file.type)){setStockError("Selecione uma imagem JPG, PNG ou WebP.");e.currentTarget.value="";return;}if(file.size>5*1024*1024){setStockError("A imagem deve ter no máximo 5 MB.");e.currentTarget.value="";return;}setMaterialImageFile(file);setMaterialImagePreview(URL.createObjectURL(file));setRemoveMaterialImage(false);}}}/><small>JPG, PNG ou WebP. Tamanho máximo: 5 MB.</small></label>
       </div>
       {materialImagePreview&&<div style={{marginTop:14,display:"flex",alignItems:"center",gap:12}}><img src={materialImagePreview} alt="Pré-visualização da imagem do material" style={{width:92,height:92,objectFit:"cover",borderRadius:10,border:"1px solid #e7e8ef"}}/><button type="button" className="secondary" onClick={()=>{setMaterialImageFile(null);setMaterialImagePreview("");setRemoveMaterialImage(true);}}>Remover imagem</button></div>}
       {editingMaterialId&&!materialImagePreview&&<div className="notice" style={{marginTop:12}}>Nenhuma imagem selecionada. Selecione um arquivo para adicionar uma imagem.</div>}
