@@ -13,3 +13,31 @@
 .memberButton{background:#fff;text-align:left;width:100%;cursor:pointer;transition:border-color .15s,transform .15s}.memberButton:hover{border-color:#b58bd8;transform:translateY(-1px)}.memberEdit{font-size:10px;color:var(--purple);font-weight:700;margin-top:4px}
 .requestDetailModal{width:min(1080px,calc(100vw - 48px));max-height:calc(100vh - 40px);padding:30px 34px;box-sizing:border-box}
 @media(max-width:700px){.requestDetailModal{width:calc(100vw - 20px);max-height:calc(100vh - 20px);padding:20px 16px}}
+
+/* Central de notificações */
+.topbar{position:relative;z-index:5}
+.notificationWrap{position:relative;display:flex;align-items:center}
+.notificationBell{position:relative;width:38px;height:38px;border:1px solid #ece8f1;border-radius:10px;background:#fff;color:#6f6878;display:grid;place-items:center;transition:background .15s,border-color .15s,color .15s}
+.notificationBell:hover{background:#f8f3fc;border-color:#d8c4eb;color:#7627c8}
+.notificationBadge{position:absolute;top:-5px;right:-5px;min-width:18px;height:18px;padding:0 5px;border:2px solid #fff;border-radius:20px;background:#7a1bd8;color:#fff;font-size:9px;font-weight:700;display:grid;place-items:center}
+.notificationPanel{position:absolute;top:48px;right:0;width:min(390px,calc(100vw - 32px));max-height:min(560px,calc(100vh - 100px));overflow:hidden;background:#fff;border:1px solid #e8e3ed;border-radius:13px;box-shadow:0 18px 55px #24163324;display:flex;flex-direction:column;z-index:30}
+.notificationPanelHead{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:15px 16px;border-bottom:1px solid #f0edf3}
+.notificationPanelHead b,.notificationPanelHead small{display:block}
+.notificationPanelHead b{font:700 14px Manrope;color:#292536}
+.notificationPanelHead small{font-size:10px;color:#858397;margin-top:3px}
+.notificationPanelActions{display:flex;align-items:center;gap:8px}
+.notificationPanelActions .textButton{font-size:10px;white-space:nowrap}
+.notificationPanelActions .iconButton{width:27px;height:27px;flex:none}
+.notificationList{overflow-y:auto}
+.notificationItem{width:100%;border:0;border-bottom:1px solid #f2eff5;background:#fff;padding:13px 15px;display:flex;align-items:flex-start;gap:10px;text-align:left;transition:background .15s}
+.notificationItem:hover{background:#faf7fd}
+.notificationItem.unread{background:#fcf9ff}
+.notificationItemDot{width:8px;height:8px;border-radius:50%;background:#7a1bd8;flex:none;margin-top:5px}
+.notificationItem.read .notificationItemDot{background:#d9d5df}
+.notificationItemContent{min-width:0;display:grid;gap:4px}
+.notificationItemContent b{font-size:11px;color:#34303c;line-height:1.4}
+.notificationItemContent span{font-size:11px;color:#686474;line-height:1.45;white-space:normal}
+.notificationItemContent small{font-size:9px;color:#9994a1;margin-top:2px}
+.notificationEmpty{padding:28px 18px;text-align:center;font-size:11px;color:#858397}
+.notificationError{margin:10px;padding:9px;border-radius:8px;background:#fff0ee;color:#a33f36;font-size:10px;line-height:1.45}
+@media(max-width:700px){.topRight{gap:10px}.notificationPanel{right:-45px;width:min(370px,calc(100vw - 24px))}}
