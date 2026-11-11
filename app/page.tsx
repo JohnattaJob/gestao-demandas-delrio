@@ -158,7 +158,7 @@ export default function Home() {
       const [areaResult, requestResult, memberResult, profileAreasResult] = await Promise.all([
         supabase.from("areas").select("id,name").eq("active",true).order("name"),
         supabase.from("requests").select("id,protocol,title,description,area_id,requester_id,owner_id,priority,status,due_date,created_at,completed_at,deleted_at, area:areas!requests_area_id_fkey(name), owner:profiles!requests_owner_id_fkey(full_name), requester:profiles!requests_requester_id_fkey(full_name)").is("deleted_at",null).order("created_at",{ascending:false}),
-        supabase.from("profiles").select("id,full_name,email,role,area_id,active,stock_manager").eq("active",true).order("full_name"),
+        supabase.from("profiles").select("id,full_name,email,role,area_id,active,stock_manager").order("full_name"),
         supabase.from("profile_areas").select("profile_id,area_id")
       ]);
       if (areaResult.error) throw areaResult.error;
@@ -1201,7 +1201,7 @@ export default function Home() {
           </div>
         </>}
         {active==="Colaboradores" && <><div className="pageHeading"><div><p className="eyebrow">EQUIPE</p><h1>Colaboradores</h1><p className="sub">Gerencie áreas, perfis e situação dos usuários cadastrados.</p></div><button className="secondary" onClick={()=>session?.user&&loadData(session.user)}><RefreshCw size={15}/> Atualizar lista</button></div>
-          <div className="panel"><div className="panelHead"><div><h3>Equipe cadastrada</h3><p>{members.length} usuário(s) ativo(s) visível(is)</p></div></div>
+          <div className="panel"><div className="panelHead"><div><h3>Equipe cadastrada</h3><p>{members.length} colaborador(es) cadastrado(s)</p></div></div>
             {profile?.role==="admin"&&<div className="notice">Para adicionar uma pessoa, primeiro crie o usuário em Supabase → Authentication → Users → Add user. O banco cria o perfil automaticamente. Depois atualize esta lista para gerenciar sua área e função.</div>}
             <div className="memberGrid">{members.map(m=><button className="memberCard memberButton" key={m.id} onClick={()=>{setSelectedMember(m);setMemberTaskStatus("Todas");setMemberForm({full_name:m.full_name,role:m.role,area_ids:m.area_ids||[],active:m.active,stock_manager:m.stock_manager===true});setMemberMessage("")}}><div className="userAvatar">{m.full_name.split(" ").map(x=>x[0]).slice(0,2).join("")}</div><b>{m.full_name}</b><small>{m.email||"Sem e-mail"}</small><small>{m.role==="admin"?"Administrador":m.role==="gestor"?"Gestor":"Colaborador"}</small><small>{(m.area_ids||[]).length ? areas.filter(a=>(m.area_ids||[]).includes(a.id)).map(a=>a.name).join(" · ") : "Área não definida"}</small><small>{m.role==="admin"?"Gerenciamento de estoque: acesso automático":m.stock_manager?"Gerencia estoque":"Sem permissão de estoque"}</small><span className="memberEdit">{profile?.role==="admin"?"Editar cadastro":"Visualizar cadastro"}</span></button>)}{!members.length&&<div className="emptyTable">Nenhum colaborador visível para este perfil.</div>}</div>
           </div></>}
