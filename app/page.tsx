@@ -189,7 +189,7 @@ export default function Home() {
     ]);
     if (commentsResult.error || readsResult.error) return;
     const lastReadByRequest = new Map<string,string>(
-      (readsResult.data || []).map((read:any) => [read.request_id, read.last_read_at])
+      (readsResult.data || []).map((read:any) => [read.request_id, read.last_read_at] as [string,string])
     );
     const counts:Record<string,number> = {};
     for (const comment of (commentsResult.data || []) as {request_id:string;author_id:string;created_at:string}[]) {
