@@ -1472,7 +1472,7 @@ export default function Home() {
           <Stat icon={<CheckCircle2/>} label="Concluídas" value={memberTasksDone} tone="green"/>
           <Stat icon={<AlertTriangle/>} label="Atrasadas" value={memberTasksLate} tone="red"/>
         </div>
-        <div className="toolbar"><div><b>Lista de demandas</b><p className="muted">Clique em uma demanda para abrir os detalhes e supervisionar o andamento.</p></div><label style={{minWidth:180}}>Filtrar por status<select value={memberTaskStatus} onChange={e=>setMemberTaskStatus(e.target.value)}><option value="Todas">Todos os status</option>{(["Recebida","Em análise","Aguardando aprovação","Em execução","Concluída","Cancelada"] as Status[]).map(status=><option key={status} value={status}>{status}</option>)}</select></label></div>
+        <div className="toolbar" style={{alignItems:"end",gap:18,flexWrap:"wrap"}}><div><b>Lista de demandas</b><p className="muted">Clique em uma demanda para abrir os detalhes e supervisionar o andamento.</p></div><div style={{width:"min(240px,100%)"}}><label className="scheduleFieldLabel" htmlFor="member-task-status">Filtrar por status</label><select id="member-task-status" className="scheduleSelect" value={memberTaskStatus} onChange={e=>setMemberTaskStatus(e.target.value)}><option value="Todas">Todos os status</option>{(["Recebida","Em análise","Aguardando aprovação","Em execução","Concluída","Cancelada"] as Status[]).map(status=><option key={status} value={status}>{status}</option>)}</select></div></div>
         <div style={{maxHeight:"48vh",overflowY:"auto",width:"100%"}}><TaskTable tasks={visibleMemberTasks} onSelect={task=>{setSelectedMember(null);setSelected(task)}} unreadCounts={unreadCounts}/></div>
       </div>
     </div></div>}
