@@ -1,5 +1,5 @@
 -- Gestão de Demandas DelRio | imagens dos materiais
--- Bucket privado; leitura para usuários autenticados e gravação restrita a quem gerencia o estoque.
+-- Bucket privado; leitura para usuários ativos e gravação restrita a quem gerencia o estoque.
 
 begin;
 
@@ -18,7 +18,7 @@ create policy material_images_authenticated_read
   on storage.objects
   for select
   to authenticated
-  using (bucket_id = 'material-images');
+  using (bucket_id = 'material-images' and public.is_active_user());
 
 drop policy if exists material_images_stock_insert on storage.objects;
 create policy material_images_stock_insert
