@@ -41,3 +41,10 @@
 .notificationEmpty{padding:28px 18px;text-align:center;font-size:11px;color:#858397}
 .notificationError{margin:10px;padding:9px;border-radius:8px;background:#fff0ee;color:#a33f36;font-size:10px;line-height:1.45}
 @media(max-width:700px){.topRight{gap:10px}.notificationPanel{right:-45px;width:min(370px,calc(100vw - 24px))}}
+
+/* Campos de filtro compartilhados entre as telas */
+.scheduleFieldLabel{display:block;margin:0 0 9px;color:#565568;font-size:11px;font-weight:700;letter-spacing:.035em}
+.scheduleSelect{appearance:none;-webkit-appearance:none;width:100%;height:43px;border:1px solid #e1e2ea;border-radius:10px;background-color:#fff;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%237627c8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding:0 36px 0 12px;color:#292837;font-size:13px;font-weight:500;font-family:inherit;outline:none;transition:border-color .15s,box-shadow .15s;cursor:pointer}
+.scheduleSelect:hover{border-color:#cbb4df}
+.scheduleSelect:focus{border-color:#9b5cdb;box-shadow:0 0 0 3px rgba(122,27,216,.10)}
+.scheduleSelect option{color:#292837;background:#fff}
