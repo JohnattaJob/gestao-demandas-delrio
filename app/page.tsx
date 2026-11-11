@@ -5,7 +5,8 @@ import type { Session, User } from "@supabase/supabase-js";
 import {
   Activity, BarChart3, CalendarDays, CheckCircle2, ChevronDown, ClipboardList,
   Clock3, Download, LayoutDashboard, LogOut, Menu, Package, Plus, Search, Settings,
-  Users, X, AlertTriangle, Layers, ArrowUpRight, RefreshCw, ClipboardCheck, PackageCheck, History
+  Users, X, AlertTriangle, Layers, ArrowUpRight, RefreshCw, ClipboardCheck, PackageCheck, History,
+  MessageCircle, Send, Bell
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
@@ -15,6 +16,7 @@ type Area = { id: string; name: string };
 type Profile = { id: string; full_name: string; email: string | null; role: "admin" | "gestor" | "colaborador"; area_id: string | null; area_ids?: string[]; active: boolean; stock_manager: boolean };
 type Task = { id: string; protocol: number; title: string; area: string; areaId: string; owner: string; requester: string; requesterId: string; priority: Priority; status: Status; due: string; created: string; completedAt: string | null; description: string; ownerId: string | null };
 type AreaMember = { profile_id: string; full_name: string };
+type RequestComment = { id: string; request_id: string; author_id: string; body: string; created_at: string; author_name: string };
 type Material = {
   id: string;
   sku: string | null;
@@ -86,6 +88,13 @@ export default function Home() {
   const [showNew,setShowNew] = useState(false);
   const [mobileMenu,setMobileMenu] = useState(false);
   const [selected,setSelected] = useState<Task|null>(null);
+  const [requestComments,setRequestComments] = useState<RequestComment[]>([]);
+  const [commentsLoading,setCommentsLoading] = useState(false);
+  const [commentsSending,setCommentsSending] = useState(false);
+  const [commentsError,setCommentsError] = useState("");
+  const [commentDraft,setCommentDraft] = useState("");
+  const [unreadCounts,setUnreadCounts] = useState<Record<string,number>>({});
+  const [commentNotice,setCommentNotice] = useState("");
   const [selectedMember,setSelectedMember] = useState<Profile|null>(null);
   const [memberSaving,setMemberSaving] = useState(false);
   const [memberMessage,setMemberMessage] = useState("");
@@ -167,6 +176,122 @@ export default function Home() {
       setDataError(error.message || "Não foi possível carregar os dados do Supabase.");
     } finally { setDataLoading(false); }
   },[]);
+
+  const refreshUnreadCounts = useCallback(async () => {
+    if (!supabase || !profile?.id || !tasks.length) {
+      setUnreadCounts({});
+      return;
+    }
+    const requestIds = tasks.map(task => task.id);
+    const [commentsResult, readsResult] = await Promise.all([
+      supabase.from("request_comments").select("request_id,author_id,created_at").in("request_id", requestIds),
+      supabase.from("request_comment_reads").select("request_id,last_read_at").eq("profile_id", profile.id).in("request_id", requestIds)
+    ]);
+    if (commentsResult.error || readsResult.error) return;
+    const lastReadByRequest = new Map<string,string>(
+      (readsResult.data || []).map((read:any) => [read.request_id, read.last_read_at])
+    );
+    const counts:Record<string,number> = {};
+    for (const comment of (commentsResult.data || []) as {request_id:string;author_id:string;created_at:string}[]) {
+      const lastReadAt = lastReadByRequest.get(comment.request_id);
+      if (comment.author_id !== profile.id && (!lastReadAt || comment.created_at > lastReadAt)) {
+        counts[comment.request_id] = (counts[comment.request_id] || 0) + 1;
+      }
+    }
+    setUnreadCounts(counts);
+  },[profile?.id,tasks]);
+
+  const loadRequestComments = useCallback(async (requestId:string, markRead=true) => {
+    if (!supabase || !profile?.id) return;
+    setCommentsLoading(true);
+    setCommentsError("");
+    const {data,error} = await supabase
+      .from("request_comments")
+      .select("id,request_id,author_id,body,created_at")
+      .eq("request_id",requestId)
+      .order("created_at",{ascending:true});
+    if (error) {
+      setCommentsError(error.message);
+      setCommentsLoading(false);
+      return;
+    }
+    const names = new Map<string,string>(members.map(member => [member.id,member.full_name]));
+    names.set(profile.id,profile.full_name);
+    setRequestComments(((data || []) as Omit<RequestComment,"author_name">[]).map(comment => ({
+      ...comment,
+      author_name:names.get(comment.author_id) || "Usuário"
+    })));
+    if (markRead) {
+      const {error:readError} = await supabase.from("request_comment_reads").upsert({
+        request_id:requestId,
+        profile_id:profile.id,
+        last_read_at:new Date().toISOString()
+      },{onConflict:"request_id,profile_id"});
+      if (readError) {
+        setCommentsError("As mensagens foram carregadas, mas não foi possível atualizar a leitura: " + readError.message);
+      } else {
+        setUnreadCounts(old => ({...old,[requestId]:0}));
+      }
+    }
+    setCommentsLoading(false);
+  },[profile?.id,profile?.full_name,members]);
+
+  async function sendRequestComment() {
+    if (!supabase || !profile || !selected) return;
+    const body = commentDraft.trim();
+    if (!body || body.length > 5000) return;
+    setCommentsSending(true);
+    setCommentsError("");
+    const {error} = await supabase.from("request_comments").insert({
+      request_id:selected.id,
+      author_id:profile.id,
+      body
+    });
+    if (error) {
+      setCommentsError(error.message);
+    } else {
+      setCommentDraft("");
+      await loadRequestComments(selected.id,true);
+    }
+    setCommentsSending(false);
+  }
+
+  useEffect(() => {
+    if (profile?.id && tasks.length) void refreshUnreadCounts();
+    else setUnreadCounts({});
+  },[profile?.id,tasks,refreshUnreadCounts]);
+
+  useEffect(() => {
+    if (selected?.id && profile?.id) {
+      setRequestComments([]);
+      setCommentDraft("");
+      void loadRequestComments(selected.id,true);
+    } else {
+      setRequestComments([]);
+      setCommentDraft("");
+      setCommentsError("");
+    }
+  },[selected?.id,profile?.id,loadRequestComments]);
+
+  useEffect(() => {
+    if (!supabase || !session?.user?.id) return;
+    const channel = supabase
+      .channel("request-comments-" + session.user.id)
+      .on("postgres_changes",{event:"INSERT",schema:"public",table:"request_comments"},(payload:any) => {
+        const message = payload.new as {request_id:string;author_id:string};
+        if (!message?.request_id || message.author_id === session.user.id) return;
+        const task = tasks.find(item => item.id === message.request_id);
+        if (!task) return;
+        setCommentNotice("Nova mensagem na solicitação #" + task.protocol + ": " + task.title);
+        if (selected?.id === message.request_id) {
+          void loadRequestComments(message.request_id,true);
+        } else {
+          setUnreadCounts(old => ({...old,[message.request_id]:(old[message.request_id] || 0) + 1}));
+        }
+      })
+      .subscribe();
+    return () => { if (supabase) void supabase.removeChannel(channel); };
+  },[session?.user?.id,selected?.id,tasks,loadRequestComments]);
 
   const loadStock = useCallback(async () => {
     if (!supabase) return;
@@ -831,6 +956,7 @@ export default function Home() {
       <header className="topbar"><button className="menuButton" onClick={()=>setMobileMenu(true)}><Menu/></button><div className="crumb">Marketing <span>/</span> {active}</div><div className="topRight"><span className="online"><i/> {dataLoading?"Sincronizando":"Conectado ao Supabase"}</span><div className="userAvatar">{(profile?.full_name||"U").split(" ").map(x=>x[0]).slice(0,2).join("").toUpperCase()}</div></div></header>
       <div className="content">
         {dataError&&<div className="errorBanner"><span>{dataError}</span><button onClick={()=>session?.user&&loadData(session.user)}>Tentar novamente</button></div>}
+        {commentNotice&&<div className="notice" style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginBottom:16}}><span style={{display:"flex",alignItems:"center",gap:8}}><Bell size={16}/>{commentNotice}</span><button className="textButton" onClick={()=>setCommentNotice("")}>Fechar</button></div>}
         {active==="Dashboard" && <>
           <div className="pageHeading"><div><p className="eyebrow">VISÃO GERAL</p><h1>Dashboard</h1><p className="sub">Acompanhe as demandas e a operação do Marketing DelRio.</p></div><button className="primary" onClick={()=>setShowNew(true)}><Plus size={17}/> Nova solicitação</button></div>
           <style>{`
@@ -874,7 +1000,7 @@ export default function Home() {
             <div className="dashFilterBottom"><span className="dashFilterSummary"><CalendarDays size={14}/> Critério: <strong>{dashboardDateLabel}</strong></span><span className="dashFilterSummary">{dashboardTasks.length} solicitação(ões) no resultado</span></div>
           </section>
           <div className="stats"><Stat icon={<ClipboardList/>} label="Total de solicitações" value={dashboardTasks.length} tone="blue"/><Stat icon={<Activity/>} label="Em andamento" value={dashboardInProgress} tone="violet"/><Stat icon={<CheckCircle2/>} label="Concluídas" value={dashboardDone} tone="green"/><Stat icon={<AlertTriangle/>} label="Atrasadas" value={dashboardLate} tone="red"/></div>
-          <div className="gridMain"><div className="panel"><div className="panelHead"><div><h3>Solicitações recentes</h3><p>Demandas dentro do período selecionado</p></div><button className="textButton" onClick={()=>setActive("Solicitações")}>Ver todas <ArrowUpRight size={15}/></button></div><TaskTable tasks={[...dashboardTasks].sort((a,b)=>b.created.localeCompare(a.created)).slice(0,5)} onSelect={setSelected}/></div>
+          <div className="gridMain"><div className="panel"><div className="panelHead"><div><h3>Solicitações recentes</h3><p>Demandas dentro do período selecionado</p></div><button className="textButton" onClick={()=>setActive("Solicitações")}>Ver todas <ArrowUpRight size={15}/></button></div><TaskTable tasks={[...dashboardTasks].sort((a,b)=>b.created.localeCompare(a.created)).slice(0,5)} onSelect={setSelected} unreadCounts={unreadCounts}/></div>
             <div className="panel"><div className="panelHead"><div><h3>Distribuição por área</h3><p>Volume de solicitações no período</p></div></div><div className="areaBars">{areaNames.map(a=>{const n=dashboardTasks.filter(t=>t.area===a).length;return <div className="barRow" key={a}><div><span>{a}</span><b>{n}</b></div><div className="track"><i style={{width:`${dashboardTasks.length?n/dashboardTasks.length*100:0}%`}}/></div></div>})}</div></div></div>
           <div className="panel" style={{marginBottom:18}}>
             <div className="panelHead"><div><h3>Solicitações por colaborador</h3><p>Distribuição das demandas por responsável pela execução</p></div><span className="muted">{requestsByOwner.length} colaborador(es)</span></div>
@@ -882,7 +1008,7 @@ export default function Home() {
               {requestsByOwner.map(person=><tr key={person.id}><td><b>{person.name}</b></td><td><b>{person.total}</b></td><td>{person.inProgress}</td><td>{person.done}</td><td>{person.late}</td><td>{person.cancelled}</td></tr>)}
             </tbody></table></div>}
           </div>
-          <div className="panel"><div className="panelHead"><div><h3>Próximos prazos</h3><p>Demandas que exigem acompanhamento</p></div><button className="textButton" onClick={()=>setActive("Cronograma")}>Abrir cronograma <ArrowUpRight size={15}/></button></div><TaskTable tasks={[...dashboardTasks].filter(t=>t.status!=="Concluída"&&t.status!=="Cancelada").sort((a,b)=>a.due.localeCompare(b.due)).slice(0,4)} onSelect={setSelected}/></div>
+          <div className="panel"><div className="panelHead"><div><h3>Próximos prazos</h3><p>Demandas que exigem acompanhamento</p></div><button className="textButton" onClick={()=>setActive("Cronograma")}>Abrir cronograma <ArrowUpRight size={15}/></button></div><TaskTable tasks={[...dashboardTasks].filter(t=>t.status!=="Concluída"&&t.status!=="Cancelada").sort((a,b)=>a.due.localeCompare(b.due)).slice(0,4)} onSelect={setSelected} unreadCounts={unreadCounts}/></div>
         </>}
         {active==="Solicitações" && <><div className="pageHeading"><div><p className="eyebrow">GESTÃO OPERACIONAL</p><h1>Solicitações</h1><p className="sub">Cadastre, distribua e acompanhe as demandas.</p></div><button className="primary" onClick={()=>setShowNew(true)}><Plus size={17}/> Nova solicitação</button></div><style>{`
             .requestFilterCard{padding:22px 24px;margin-bottom:18px;border:1px solid #e7e8ef;background:linear-gradient(135deg,#fff 0%,#fcfbff 100%);box-shadow:0 5px 18px rgba(31,24,55,.035)}
@@ -915,7 +1041,7 @@ export default function Home() {
             </div>
             <div className="requestFilterBottom"><span><strong>{filtered.length}</strong> registro(s) encontrado(s)</span></div>
           </section>
-          <div className="panel"><TaskTable tasks={filtered} onSelect={setSelected}/></div></>}
+          <div className="panel"><TaskTable tasks={filtered} onSelect={setSelected} unreadCounts={unreadCounts}/></div></>}
         {active==="Pedidos de Materiais" && <>
           <div className="pageHeading"><div><p className="eyebrow">SUPRIMENTOS INTERNOS</p><h1>Pedidos de Materiais</h1><p className="sub">Solicite materiais, acompanhe aprovações e consulte a separação e entrega.</p></div><div style={{display:"flex",gap:10,flexWrap:"wrap"}}><button className="secondary" onClick={loadMaterialOrders} disabled={ordersLoading}><RefreshCw size={15}/> Atualizar</button><button className="primary" onClick={()=>{setOrdersError("");setOrderAreaId(myOrderAreas.some(a=>a.id===profile?.area_id)?profile?.area_id||"":myOrderAreas[0]?.id||"");setShowNewMaterialOrder(true)}} disabled={!myOrderAreas.length}><Plus size={16}/> Novo pedido</button></div></div>
           {ordersError&&<div className="errorBanner"><span>{ordersError}</span><button onClick={()=>setOrdersError("")}>Fechar</button></div>}
@@ -1199,7 +1325,7 @@ export default function Home() {
             <section className="panel reportPanel"><div className="reportPanelHead"><div><h3>Desempenho da equipe</h3><p>Solicitações atribuídas por responsável</p></div></div>{!reportByOwner.length?<div className="emptyTable">Não há solicitações atribuídas no período.</div>:<div className="tableWrap"><table><thead><tr><th>Responsável</th><th>Total</th><th>Concluídas</th><th>Em andamento</th><th>Atrasadas</th></tr></thead><tbody>{reportByOwner.map(person=><tr key={person.id}><td><b>{person.name}</b></td><td>{person.total}</td><td>{person.done}</td><td>{person.inProgress}</td><td>{person.late}</td></tr>)}</tbody></table></div>}</section>
             <section className="panel reportPanel"><div className="reportPanelHead"><div><h3>Taxa de conclusão</h3><p>Percentual de demandas concluídas no resultado filtrado</p></div></div><div className="reportRate"><strong>{reportCompletionRate}%</strong><span>{reportDone} de {reportCompletionBase} solicitações válidas concluídas</span></div><div className="reportBarTrack" style={{marginTop:16,height:12}}><i style={{display:"block",height:"100%",width:`${reportCompletionRate}%`,borderRadius:99,background:"linear-gradient(90deg,#9b5cdb,#7624c7)"}}/></div><div style={{marginTop:22,paddingTop:18,borderTop:"1px solid #f0edf4"}}><div className="reportPanelHead"><div><h3>Solicitações em atraso</h3><p>{reportLate} de {reportOpenBase} solicitações abertas estão com prazo vencido</p></div><strong style={{fontSize:24,color:"#b42318"}}>{reportOverdueRate}%</strong></div><div className="reportBarTrack" style={{height:10}}><i style={{display:"block",height:"100%",width:`${reportOverdueRate}%`,borderRadius:99,background:"#d92d20"}}/></div></div></section>
           </div>
-          <section className="panel reportPanel" style={{marginTop:18}}><div className="reportPanelHead"><div><h3>Detalhamento das solicitações</h3><p>Consulte os registros que compõem os indicadores acima.</p></div></div><TaskTable tasks={[...reportTasks].sort((a,b)=>b.created.localeCompare(a.created))} onSelect={setSelected}/></section>
+          <section className="panel reportPanel" style={{marginTop:18}}><div className="reportPanelHead"><div><h3>Detalhamento das solicitações</h3><p>Consulte os registros que compõem os indicadores acima.</p></div></div><TaskTable tasks={[...reportTasks].sort((a,b)=>b.created.localeCompare(a.created))} onSelect={setSelected} unreadCounts={unreadCounts}/></section>
         </>}
         {active==="Configurações" && <><div className="pageHeading"><div><p className="eyebrow">ADMINISTRAÇÃO</p><h1>Configurações</h1><p className="sub">Parâmetros do ambiente e sua conta.</p></div></div><div className="panel"><h3>Áreas cadastradas no Supabase</h3><div className="areaList">{areaNames.map(a=><div key={a}><Layers size={17}/>{a}<span>Ativa</span></div>)}</div><p className="notice">Usuário conectado: {profile?.email}. Perfil: {profile?.role}. A prioridade é controlada por gestores e administradores.</p></div></>}
       </div>
@@ -1272,10 +1398,42 @@ export default function Home() {
           <Stat icon={<AlertTriangle/>} label="Atrasadas" value={memberTasksLate} tone="red"/>
         </div>
         <div className="toolbar"><div><b>Lista de demandas</b><p className="muted">Clique em uma demanda para abrir os detalhes e supervisionar o andamento.</p></div><label style={{minWidth:180}}>Filtrar por status<select value={memberTaskStatus} onChange={e=>setMemberTaskStatus(e.target.value)}><option value="Todas">Todos os status</option>{(["Recebida","Em análise","Aguardando aprovação","Em execução","Concluída","Cancelada"] as Status[]).map(status=><option key={status} value={status}>{status}</option>)}</select></label></div>
-        <div style={{maxHeight:"48vh",overflowY:"auto",width:"100%"}}><TaskTable tasks={visibleMemberTasks} onSelect={task=>{setSelectedMember(null);setSelected(task)}}/></div>
+        <div style={{maxHeight:"48vh",overflowY:"auto",width:"100%"}}><TaskTable tasks={visibleMemberTasks} onSelect={task=>{setSelectedMember(null);setSelected(task)}} unreadCounts={unreadCounts}/></div>
       </div>
     </div></div>}
-    {selected&&<div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setSelected(null)}}><div className="modal"><div className="modalHead"><div><p className="eyebrow">PROTOCOLO #{selected.protocol}</p><h2>{selected.title}</h2><p>{selected.area} · Aberta em {new Date(selected.created+"T12:00:00").toLocaleDateString("pt-BR")}</p></div><button className="iconButton" onClick={()=>setSelected(null)}><X/></button></div><div className="detailGrid"><div><small>Responsável</small><b>{selected.owner}</b></div><div><small>Prazo</small><b>{new Date(selected.due+"T12:00:00").toLocaleDateString("pt-BR")}</b></div><div><small>Prioridade</small><b>{selected.priority}</b></div><div><small>Status atual</small><StatusBadge status={selected.status}/></div></div><p className="description">{selected.description||"Sem descrição adicional."}</p>{(isManager || (selected.ownerId===profile?.id && selected.requesterId!==profile?.id))?<label>Atualizar status<select value={selected.status} onChange={e=>{const nextStatus=e.target.value as Status;if(nextStatus==="Concluída"&&selected.status!=="Concluída"){setCompleteConfirm(true);return;}updateTask(selected,{status:nextStatus});}}>{(["Recebida","Em análise","Aguardando aprovação","Em execução","Concluída","Cancelada"] as Status[]).map(s=><option key={s}>{s}</option>)}</select></label>:<p className="notice">O status é atualizado pelo responsável pela demanda ou pela gestão. O solicitante pode acompanhar a solicitação, mas não alterar seu status.</p>}{completeConfirm&&<div style={{padding:14,marginTop:12,border:"1px solid #f5d08a",background:"#fffbeb",borderRadius:10}}><b style={{color:"#92400e"}}>Confirmar conclusão da solicitação?</b><p style={{margin:"6px 0 12px",fontSize:13,color:"#667085"}}>Ao confirmar, o sistema concluirá a solicitação e dará baixa automática no estoque físico dos materiais reservados. As reservas vinculadas serão encerradas e a movimentação ficará registrada no histórico.</p><div className="modalActions" style={{marginTop:0}}><button className="secondary" onClick={()=>setCompleteConfirm(false)}>Voltar</button><button className="primary" onClick={()=>updateTask(selected,{status:"Concluída"})}>Confirmar conclusão</button></div></div>}{isManager&&<><label>Responsável<select value={selected.ownerId||""} onChange={e=>updateTask(selected,{ownerId:e.target.value||null})}><option value="">Selecione um responsável</option>{selectedAreaMembers.map(m=><option key={m.profile_id} value={m.profile_id}>{m.full_name}</option>)}</select><small>Somente integrantes ativos da área {selected.area} podem ser atribuídos.</small></label><label>Prioridade<select value={selected.priority} onChange={e=>updateTask(selected,{priority:e.target.value as Priority})}>{(["Baixa","Média","Alta","Urgente"] as Priority[]).map(s=><option key={s}>{s}</option>)}</select></label></>}{(isManager || selected.requesterId===profile?.id)&&<div style={{marginTop:18}}>
+    {selected&&<div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setSelected(null)}}><div className="modal"><div className="modalHead"><div><p className="eyebrow">PROTOCOLO #{selected.protocol}</p><h2>{selected.title}</h2><p>{selected.area} · Aberta em {new Date(selected.created+"T12:00:00").toLocaleDateString("pt-BR")}</p></div><button className="iconButton" onClick={()=>setSelected(null)}><X/></button></div><div className="detailGrid"><div><small>Responsável</small><b>{selected.owner}</b></div><div><small>Prazo</small><b>{new Date(selected.due+"T12:00:00").toLocaleDateString("pt-BR")}</b></div><div><small>Prioridade</small><b>{selected.priority}</b></div><div><small>Status atual</small><StatusBadge status={selected.status}/></div></div><p className="description">{selected.description||"Sem descrição adicional."}</p>
+      <section style={{marginTop:22,padding:18,border:"1px solid #e8e3ef",borderRadius:14,background:"#fcfbfe"}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap",marginBottom:14}}>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <span style={{width:36,height:36,display:"grid",placeItems:"center",borderRadius:11,background:"#f2eaff",color:"#7a1bd8"}}><MessageCircle size={18}/></span>
+            <div><h3 style={{margin:0,fontSize:15,color:"#292536"}}>Conversa da solicitação</h3><p style={{margin:"3px 0 0",fontSize:12,color:"#858397"}}>Mensagens entre o solicitante e os responsáveis pela demanda.</p></div>
+          </div>
+          <span style={{fontSize:11,fontWeight:700,color:(unreadCounts[selected.id]||0)>0?"#7020c5":"#667085",background:(unreadCounts[selected.id]||0)>0?"#f2e8ff":"#f1f1f5",padding:"6px 10px",borderRadius:20}}>{unreadCounts[selected.id]||0} não lida(s)</span>
+        </div>
+        <div style={{display:"grid",gap:10,maxHeight:320,overflowY:"auto",padding:"4px 2px 10px"}}>
+          {commentsLoading&&!requestComments.length?<div className="emptyTable">Carregando conversa...</div>:!requestComments.length?<div className="emptyTable">Nenhuma mensagem ainda. Use o campo abaixo para iniciar a conversa.</div>:requestComments.map(message=>{
+            const mine=message.author_id===profile?.id;
+            return <div key={message.id} style={{display:"flex",justifyContent:mine?"flex-end":"flex-start"}}>
+              <div style={{maxWidth:"88%",minWidth:150,padding:"10px 12px",borderRadius:12,border:mine?"1px solid #e2d2f4":"1px solid #e7e8ef",background:mine?"#f5edff":"#fff"}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:14,marginBottom:6}}>
+                  <b style={{fontSize:12,color:mine?"#7020c5":"#333244"}}>{mine?"Você":message.author_name}</b>
+                  <small style={{fontSize:10,color:"#858397",whiteSpace:"nowrap"}}>{new Date(message.created_at).toLocaleString("pt-BR")}</small>
+                </div>
+                <p style={{margin:0,fontSize:13,lineHeight:1.55,color:"#454253",whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{message.body}</p>
+              </div>
+            </div>;
+          })}
+        </div>
+        {commentsError&&<div className="errorBox" style={{marginTop:10}}>{commentsError}</div>}
+        <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) auto",alignItems:"end",gap:10,marginTop:12}}>
+          <label style={{display:"grid",gap:6,fontSize:12,fontWeight:600,color:"#565568"}}>Nova mensagem
+            <textarea rows={3} maxLength={5000} value={commentDraft} onChange={e=>setCommentDraft(e.target.value)} placeholder="Escreva uma mensagem para os participantes desta solicitação..." style={{width:"100%",boxSizing:"border-box",resize:"vertical",padding:"11px 12px",border:"1px solid #dedbe6",borderRadius:10,fontFamily:"inherit",fontSize:13,outlineColor:"#9b5cdb",background:"#fff"}}/>
+            <small style={{fontWeight:400,color:"#858397"}}>{commentDraft.length}/5000 caracteres</small>
+          </label>
+          <button className="primary" type="button" onClick={sendRequestComment} disabled={commentsSending||!commentDraft.trim()||commentDraft.trim().length>5000} style={{height:42,whiteSpace:"nowrap"}}>{commentsSending?"Enviando...":<><Send size={15}/> Enviar</>}</button>
+        </div>
+      </section>
+      {(isManager || (selected.ownerId===profile?.id && selected.requesterId!==profile?.id))?<label>Atualizar status<select value={selected.status} onChange={e=>{const nextStatus=e.target.value as Status;if(nextStatus==="Concluída"&&selected.status!=="Concluída"){setCompleteConfirm(true);return;}updateTask(selected,{status:nextStatus});}}>{(["Recebida","Em análise","Aguardando aprovação","Em execução","Concluída","Cancelada"] as Status[]).map(s=><option key={s}>{s}</option>)}</select></label>:<p className="notice">O status é atualizado pelo responsável pela demanda ou pela gestão. O solicitante pode acompanhar a solicitação, mas não alterar seu status.</p>}{completeConfirm&&<div style={{padding:14,marginTop:12,border:"1px solid #f5d08a",background:"#fffbeb",borderRadius:10}}><b style={{color:"#92400e"}}>Confirmar conclusão da solicitação?</b><p style={{margin:"6px 0 12px",fontSize:13,color:"#667085"}}>Ao confirmar, o sistema concluirá a solicitação e dará baixa automática no estoque físico dos materiais reservados. As reservas vinculadas serão encerradas e a movimentação ficará registrada no histórico.</p><div className="modalActions" style={{marginTop:0}}><button className="secondary" onClick={()=>setCompleteConfirm(false)}>Voltar</button><button className="primary" onClick={()=>updateTask(selected,{status:"Concluída"})}>Confirmar conclusão</button></div></div>}{isManager&&<><label>Responsável<select value={selected.ownerId||""} onChange={e=>updateTask(selected,{ownerId:e.target.value||null})}><option value="">Selecione um responsável</option>{selectedAreaMembers.map(m=><option key={m.profile_id} value={m.profile_id}>{m.full_name}</option>)}</select><small>Somente integrantes ativos da área {selected.area} podem ser atribuídos.</small></label><label>Prioridade<select value={selected.priority} onChange={e=>updateTask(selected,{priority:e.target.value as Priority})}>{(["Baixa","Média","Alta","Urgente"] as Priority[]).map(s=><option key={s}>{s}</option>)}</select></label></>}{(isManager || selected.requesterId===profile?.id)&&<div style={{marginTop:18}}>
       {deleteConfirm ? <div style={{padding:14,border:"1px solid #fecaca",background:"#fff7f7",borderRadius:10}}>
         <b style={{color:"#b42318"}}>Confirmar exclusão?</b>
         <p style={{margin:"6px 0 12px",fontSize:13,color:"#667085"}}>A solicitação será retirada das listas, mas permanecerá preservada no histórico do banco de dados.</p>
@@ -1286,6 +1444,6 @@ export default function Home() {
 }
 function Stat({icon,label,value,tone}:{icon:React.ReactNode,label:string,value:number,tone:string}) { return <div className="statCard"><div className={`statIcon ${tone}`}>{icon}</div><div><small>{label}</small><strong>{value}</strong></div></div>; }
 function StatusBadge({status}:{status:Status}) { return <span className={`status ${statusClass[status]}`}>{status}</span>; }
-function TaskTable({tasks,onSelect}:{tasks:Task[],onSelect:(t:Task)=>void}) { if(!tasks.length)return <div className="emptyTable">Nenhuma solicitação cadastrada no Supabase.</div>; return <div className="tableWrap"><table><thead><tr><th>Solicitação</th><th>Área</th><th>Responsável</th><th>Prioridade</th><th>Prazo</th><th>Status</th></tr></thead><tbody>{tasks.map(t=><tr key={t.id} onClick={()=>onSelect(t)}><td><b>#{t.protocol}</b><span>{t.title}</span></td><td>{t.area}</td><td>{t.owner}</td><td><span className={`priority ${t.priority.toLowerCase()}`}>{t.priority}</span></td><td>{new Date(t.due+"T12:00:00").toLocaleDateString("pt-BR")}</td><td><StatusBadge status={t.status}/></td></tr>)}</tbody></table></div>; }
+function TaskTable({tasks,onSelect,unreadCounts={}}:{tasks:Task[],onSelect:(t:Task)=>void,unreadCounts?:Record<string,number>}) { if(!tasks.length)return <div className="emptyTable">Nenhuma solicitação cadastrada no Supabase.</div>; return <div className="tableWrap"><table><thead><tr><th>Solicitação</th><th>Área</th><th>Responsável</th><th>Prioridade</th><th>Prazo</th><th>Status</th></tr></thead><tbody>{tasks.map(t=><tr key={t.id} onClick={()=>onSelect(t)}><td><b>#{t.protocol}</b><span>{t.title}</span>{(unreadCounts[t.id]||0)>0&&<span style={{display:"inline-flex",alignItems:"center",gap:5,marginTop:5,padding:"4px 8px",borderRadius:20,background:"#f2e8ff",color:"#7020c5",fontSize:10,fontWeight:700}}><MessageCircle size={11}/>{unreadCounts[t.id]} não lida(s)</span>}</td><td>{t.area}</td><td>{t.owner}</td><td><span className={`priority ${t.priority.toLowerCase()}`}>{t.priority}</span></td><td>{new Date(t.due+"T12:00:00").toLocaleDateString("pt-BR")}</td><td><StatusBadge status={t.status}/></td></tr>)}</tbody></table></div>; }
 
 
