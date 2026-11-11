@@ -366,8 +366,9 @@ export default function Home() {
       if (materialsError) throw materialsError;
       const materialRows = (materialsData || []) as Material[];
       setStockMaterials(materialRows);
+      const storage = supabase.storage;
       const signedImages = await Promise.all(materialRows.filter(m=>m.image_path).map(async m=>{
-        const {data} = await supabase.storage.from("material-images").createSignedUrl(m.image_path!,3600);
+        const {data} = await storage.from("material-images").createSignedUrl(m.image_path!,3600);
         return data?.signedUrl ? [m.id,data.signedUrl] as const : null;
       }));
       setMaterialImageUrls(Object.fromEntries(signedImages.filter((item):item is readonly [string,string]=>item!==null)));
@@ -411,8 +412,9 @@ export default function Home() {
       setMaterialOrders(rows);
       const orderMaterials = (materialsResult.data || []) as Material[];
       setStockMaterials(orderMaterials);
+      const storage = supabase.storage;
       const signedImages = await Promise.all(orderMaterials.filter(m=>m.image_path).map(async m=>{
-        const {data} = await supabase.storage.from("material-images").createSignedUrl(m.image_path!,3600);
+        const {data} = await storage.from("material-images").createSignedUrl(m.image_path!,3600);
         return data?.signedUrl ? [m.id,data.signedUrl] as const : null;
       }));
       setMaterialImageUrls(Object.fromEntries(signedImages.filter((item):item is readonly [string,string]=>item!==null)));
