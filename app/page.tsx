@@ -301,10 +301,11 @@ export default function Home() {
     if (!notification.is_read) await markNotificationRead(notification.id);
     setShowNotifications(false);
     if (notification.material_order_id) {
+      const alreadyViewingOrders = active === "Pedidos de Materiais";
       setActive("Pedidos de Materiais");
       setSelected(null);
       setSelectedMaterialOrder(notification.material_order_id);
-      await loadMaterialOrders();
+      if (alreadyViewingOrders) await loadMaterialOrders();
     }
   }
 
