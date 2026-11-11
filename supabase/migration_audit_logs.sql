@@ -62,28 +62,25 @@ BEGIN
 
     IF TG_OP = 'INSERT' THEN
         v_new := to_jsonb(NEW);
-        v_record_id := COALESCE(
-            v_new ->> 'id',
-            v_new ->> 'profile_id',
-            v_new ->> 'request_id',
-            v_new ->> 'order_id'
-        );
     ELSIF TG_OP = 'UPDATE' THEN
         v_old := to_jsonb(OLD);
         v_new := to_jsonb(NEW);
-        v_record_id := COALESCE(
-            v_new ->> 'id',
-            v_new ->> 'profile_id',
-            v_new ->> 'request_id',
-            v_new ->> 'order_id'
-        );
     ELSE
         v_old := to_jsonb(OLD);
+    END IF;
+
+    IF TG_TABLE_NAME = 'profile_areas' THEN
+        v_record_id := COALESCE(v_new, v_old) ->> 'profile_id'
+            || ':' || COALESCE(v_new, v_old) ->> 'area_id';
+    ELSIF TG_TABLE_NAME = 'request_assignees' THEN
+        v_record_id := COALESCE(v_new, v_old) ->> 'request_id'
+            || ':' || COALESCE(v_new, v_old) ->> 'profile_id';
+    ELSE
         v_record_id := COALESCE(
-            v_old ->> 'id',
-            v_old ->> 'profile_id',
-            v_old ->> 'request_id',
-            v_old ->> 'order_id'
+            COALESCE(v_new, v_old) ->> 'id',
+            COALESCE(v_new, v_old) ->> 'profile_id',
+            COALESCE(v_new, v_old) ->> 'request_id',
+            COALESCE(v_new, v_old) ->> 'order_id'
         );
     END IF;
 
