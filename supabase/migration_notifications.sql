@@ -46,13 +46,12 @@ as $$
 declare
   v_protocol bigint;
   v_area_name text;
-  v_requester_name text;
   v_title text;
   v_message text;
   v_type text;
 begin
-  select mo.protocol, a.name, p.full_name
-    into v_protocol, v_area_name, v_requester_name
+  select mo.protocol, a.name
+    into v_protocol, v_area_name
   from public.material_orders mo
   join public.areas a on a.id = mo.area_id
   join public.profiles p on p.id = mo.requester_id
@@ -204,6 +203,8 @@ begin
   return new;
 end;
 $$;
+
+revoke all on function public.notify_material_order_events() from public, anon, authenticated;
 
 drop trigger if exists material_order_notifications_trigger on public.material_orders;
 create trigger material_order_notifications_trigger
