@@ -274,12 +274,13 @@ export default function Home() {
   },[selected?.id,profile?.id,loadRequestComments]);
 
   useEffect(() => {
-    if (!supabase || !session?.user?.id) return;
+    const currentUserId = session?.user?.id;
+    if (!supabase || !currentUserId) return;
     const channel = supabase
-      .channel("request-comments-" + session.user.id)
+      .channel("request-comments-" + currentUserId)
       .on("postgres_changes",{event:"INSERT",schema:"public",table:"request_comments"},(payload:any) => {
         const message = payload.new as {request_id:string;author_id:string};
-        if (!message?.request_id || message.author_id === session.user.id) return;
+        if (!message?.request_id || message.author_id === currentUserId) return;
         const task = tasks.find(item => item.id === message.request_id);
         if (!task) return;
         setCommentNotice("Nova mensagem na solicitação #" + task.protocol + ": " + task.title);
