@@ -217,13 +217,13 @@ export default function Home() {
     }
     const names = new Map<string,string>(members.map(member => [member.id,member.full_name]));
     names.set(profile.id,profile.full_name);
-    setRequestComments(((data || []) as (Omit<RequestComment,"author_name"> & {author?:{full_name:string}|null})[]).map(comment => ({
+    setRequestComments(((data || []) as (Omit<RequestComment,"author_name"> & {author?:{full_name:string}[]|null})[]).map(comment => ({
       id:comment.id,
       request_id:comment.request_id,
       author_id:comment.author_id,
       body:comment.body,
       created_at:comment.created_at,
-      author_name:comment.author?.full_name || names.get(comment.author_id) || "Usuário"
+      author_name:comment.author?.[0]?.full_name || names.get(comment.author_id) || "Usuário"
     })));
     if (markRead) {
       const {error:readError} = await supabase.from("request_comment_reads").upsert({
