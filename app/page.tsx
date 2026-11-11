@@ -42,6 +42,7 @@ type MaterialOrderStatus = "aguardando_aprovacao_gestor" | "aguardando_aprovacao
 type MaterialOrder = { id:string; protocol:number; requester_id:string; area_id:string; purpose:string; needed_by:string; status:MaterialOrderStatus; manager_approver_id:string|null; stock_approver_id:string|null; rejection_reason:string|null; created_at:string; updated_at:string };
 type MaterialOrderItem = { id:string; order_id:string; material_id:string; quantity:number; material?:{name:string;unit:string;sku:string|null} };
 type MaterialOrderHistory = { id:string; order_id:string; actor_id:string|null; action:string; previous_status:string|null; new_status:string|null; details:string|null; created_at:string; actor_name?:string };
+type AppNotification = { id:string; title:string; message:string; notification_type:string; material_order_id:string|null; is_read:boolean; created_at:string };
 
 const statusToDb: Record<Status,string> = { "Recebida":"recebida", "Em análise":"em_analise", "Aguardando aprovação":"aguardando_aprovacao", "Em execução":"em_execucao", "Concluída":"concluida", "Cancelada":"cancelada" };
 const dbToStatus: Record<string,Status> = { recebida:"Recebida", em_analise:"Em análise", aguardando_aprovacao:"Aguardando aprovação", em_execucao:"Em execução", concluida:"Concluída", cancelada:"Cancelada" };
@@ -95,6 +96,10 @@ export default function Home() {
   const [commentDraft,setCommentDraft] = useState("");
   const [unreadCounts,setUnreadCounts] = useState<Record<string,number>>({});
   const [commentNotice,setCommentNotice] = useState("");
+  const [notifications,setNotifications] = useState<AppNotification[]>([]);
+  const [notificationsLoading,setNotificationsLoading] = useState(false);
+  const [notificationsError,setNotificationsError] = useState("");
+  const [showNotifications,setShowNotifications] = useState(false);
   const [selectedMember,setSelectedMember] = useState<Profile|null>(null);
   const [memberSaving,setMemberSaving] = useState(false);
   const [memberMessage,setMemberMessage] = useState("");
@@ -260,6 +265,49 @@ export default function Home() {
     setCommentsSending(false);
   }
 
+
+  const loadNotifications = useCallback(async () => {
+    if (!supabase || !profile?.id) {
+      setNotifications([]);
+      return;
+    }
+    setNotificationsLoading(true);
+    setNotificationsError("");
+    const {data,error} = await supabase
+      .from("notifications")
+      .select("id,title,message,notification_type,material_order_id,is_read,created_at")
+      .eq("recipient_id",profile.id)
+      .order("created_at",{ascending:false})
+      .limit(30);
+    if (error) setNotificationsError("Não foi possível carregar as notificações: " + error.message);
+    else setNotifications((data || []) as AppNotification[]);
+    setNotificationsLoading(false);
+  },[profile?.id]);
+
+  async function markNotificationRead(notificationId:string) {
+    if (!supabase || !profile?.id) return;
+    const {error} = await supabase.from("notifications").update({is_read:true}).eq("id",notificationId).eq("recipient_id",profile.id);
+    if (!error) setNotifications(old=>old.map(item=>item.id===notificationId?{...item,is_read:true}:item));
+  }
+
+  async function markAllNotificationsRead() {
+    if (!supabase || !profile?.id) return;
+    const {error} = await supabase.from("notifications").update({is_read:true}).eq("recipient_id",profile.id).eq("is_read",false);
+    if (error) setNotificationsError("Não foi possível marcar as notificações como lidas: " + error.message);
+    else setNotifications(old=>old.map(item=>({...item,is_read:true})));
+  }
+
+  async function openNotification(notification:AppNotification) {
+    if (!notification.is_read) await markNotificationRead(notification.id);
+    setShowNotifications(false);
+    if (notification.material_order_id) {
+      setActive("Pedidos de Materiais");
+      setSelected(null);
+      setSelectedMaterialOrder(notification.material_order_id);
+      await loadMaterialOrders();
+    }
+  }
+
   useEffect(() => {
     if (profile?.id && tasks.length) void refreshUnreadCounts();
     else setUnreadCounts({});
@@ -382,6 +430,26 @@ export default function Home() {
       setOrdersLoading(false);
     }
   },[]);
+
+
+  useEffect(() => {
+    if (profile?.id) void loadNotifications();
+    else setNotifications([]);
+  },[profile?.id,loadNotifications]);
+
+  useEffect(() => {
+    if (!supabase || !profile?.id) return;
+    const channel = supabase
+      .channel("notifications-" + profile.id)
+      .on("postgres_changes",{event:"INSERT",schema:"public",table:"notifications",filter:"recipient_id=eq." + profile.id},(payload:any) => {
+        const incoming = payload.new as AppNotification;
+        if (!incoming?.id) return;
+        setNotifications(old=>[incoming,...old.filter(item=>item.id!==incoming.id)].slice(0,30));
+        setCommentNotice(incoming.title);
+      })
+      .subscribe();
+    return () => { if (supabase) void supabase.removeChannel(channel); };
+  },[profile?.id]);
 
   useEffect(() => { if (session?.user) loadData(session.user); },[session,loadData]);
   useEffect(() => { if (active === "Estoque" && profile) loadStock(); },[active,profile,loadStock]);
@@ -690,6 +758,7 @@ export default function Home() {
     cancelado:"Cancelado"
   };
   const selectedOrder = materialOrders.find(order=>order.id===selectedMaterialOrder) || null;
+  const unreadNotificationCount = notifications.filter(item=>!item.is_read).length;
   const selectedOrderItems = materialOrderItems.filter(item=>item.order_id===selectedMaterialOrder);
   const selectedOrderHistory = materialOrderHistory.filter(item=>item.order_id===selectedMaterialOrder);
   const pendingManagerOrders = materialOrders.filter(order=>order.status==="aguardando_aprovacao_gestor").length;
@@ -958,7 +1027,7 @@ export default function Home() {
       <div className="sidebarBottom"><div className="userAvatar">{(profile?.full_name||"U").split(" ").map(x=>x[0]).slice(0,2).join("").toUpperCase()}</div><div><b>{profile?.full_name||"Usuário"}</b><small>{profile?.role==="admin"?"Administrador":profile?.role==="gestor"?"Gestor":"Colaborador"}</small></div><button className="logoutIcon" title="Sair" onClick={signOut}><LogOut size={16}/></button></div>
     </aside>
     <section className="main">
-      <header className="topbar"><button className="menuButton" onClick={()=>setMobileMenu(true)}><Menu/></button><div className="crumb">Marketing <span>/</span> {active}</div><div className="topRight"><span className="online"><i/> {dataLoading?"Sincronizando":"Conectado ao Supabase"}</span><div className="userAvatar">{(profile?.full_name||"U").split(" ").map(x=>x[0]).slice(0,2).join("").toUpperCase()}</div></div></header>
+      <header className="topbar"><button className="menuButton" onClick={()=>setMobileMenu(true)}><Menu/></button><div className="crumb">Marketing <span>/</span> {active}</div><div className="topRight"><div className="notificationWrap"><button className="notificationBell" type="button" aria-label="Abrir notificações" title="Notificações" onClick={()=>setShowNotifications(old=>!old)}><Bell size={19}/>{unreadNotificationCount>0&&<span className="notificationBadge">{unreadNotificationCount>99?"99+":unreadNotificationCount}</span>}</button>{showNotifications&&<div className="notificationPanel"><div className="notificationPanelHead"><div><b>Notificações</b><small>{unreadNotificationCount} não lida(s)</small></div><div className="notificationPanelActions"><button className="textButton" type="button" onClick={markAllNotificationsRead} disabled={!unreadNotificationCount}>Marcar todas como lidas</button><button className="iconButton" type="button" aria-label="Fechar notificações" onClick={()=>setShowNotifications(false)}><X size={14}/></button></div></div>{notificationsError&&<div className="notificationError">{notificationsError}</div>}{notificationsLoading&&!notifications.length?<div className="notificationEmpty">Carregando notificações...</div>:!notifications.length?<div className="notificationEmpty">Você ainda não tem notificações.</div>:<div className="notificationList">{notifications.map(item=><button type="button" key={item.id} className={`notificationItem ${item.is_read?"read":"unread"}`} onClick={()=>void openNotification(item)}><span className="notificationItemDot"/><span className="notificationItemContent"><b>{item.title}</b><span>{item.message}</span><small>{new Date(item.created_at).toLocaleString("pt-BR",{dateStyle:"short",timeStyle:"short"})}</small></span></button>)}</div>}</div>}</div><span className="online"><i/> {dataLoading?"Sincronizando":"Conectado ao Supabase"}</span><div className="userAvatar">{(profile?.full_name||"U").split(" ").map(x=>x[0]).slice(0,2).join("").toUpperCase()}</div></div></header>
       <div className="content">
         {dataError&&<div className="errorBanner"><span>{dataError}</span><button onClick={()=>session?.user&&loadData(session.user)}>Tentar novamente</button></div>}
         {commentNotice&&<div className="notice" style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginBottom:16}}><span style={{display:"flex",alignItems:"center",gap:8}}><Bell size={16}/>{commentNotice}</span><button className="textButton" onClick={()=>setCommentNotice("")}>Fechar</button></div>}
