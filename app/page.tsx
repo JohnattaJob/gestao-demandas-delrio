@@ -26,6 +26,7 @@ type Material = {
   quantity: number;
   minimum_quantity: number;
   active: boolean;
+  image_path: string | null;
 };
 type StockMovement = {
   id: string;
@@ -119,6 +120,11 @@ export default function Home() {
   const [stockError,setStockError] = useState("");
   const [stockSaving,setStockSaving] = useState(false);
   const [showNewMaterial,setShowNewMaterial] = useState(false);
+  const [editingMaterialId,setEditingMaterialId] = useState<string|null>(null);
+  const [materialImageFile,setMaterialImageFile] = useState<File|null>(null);
+  const [materialImagePreview,setMaterialImagePreview] = useState("");
+  const [removeMaterialImage,setRemoveMaterialImage] = useState(false);
+  const [materialImageUrls,setMaterialImageUrls] = useState<Record<string,string>>({});
   const [showStockMovement,setShowStockMovement] = useState(false);
   const [stockSearch,setStockSearch] = useState("");
   const [stockReportMaterial,setStockReportMaterial] = useState("Todos");
@@ -354,12 +360,17 @@ export default function Home() {
     try {
       const { data: materialsData, error: materialsError } = await supabase
         .from("materials")
-        .select("id,sku,name,description,unit,quantity,minimum_quantity,active")
+        .select("id,sku,name,description,unit,quantity,minimum_quantity,active,image_path")
         .eq("active", true)
         .order("name");
       if (materialsError) throw materialsError;
       const materialRows = (materialsData || []) as Material[];
       setStockMaterials(materialRows);
+      const signedImages = await Promise.all(materialRows.filter(m=>m.image_path).map(async m=>{
+        const {data} = await supabase.storage.from("material-images").createSignedUrl(m.image_path!,3600);
+        return data?.signedUrl ? [m.id,data.signedUrl] as const : null;
+      }));
+      setMaterialImageUrls(Object.fromEntries(signedImages.filter((item):item is readonly [string,string]=>item!==null));
 
       if (canManageStock) {
         const { data: movementsData, error: movementsError } = await supabase
@@ -392,13 +403,19 @@ export default function Home() {
     try {
       const [ordersResult, materialsResult] = await Promise.all([
         supabase.from("material_orders").select("*").order("created_at",{ascending:false}),
-        supabase.from("materials").select("id,sku,name,description,unit,quantity,minimum_quantity,active").eq("active",true).order("name")
+        supabase.from("materials").select("id,sku,name,description,unit,quantity,minimum_quantity,active,image_path").eq("active",true).order("name")
       ]);
       if (ordersResult.error) throw ordersResult.error;
       if (materialsResult.error) throw materialsResult.error;
       const rows = (ordersResult.data || []) as MaterialOrder[];
       setMaterialOrders(rows);
-      setStockMaterials((materialsResult.data || []) as Material[]);
+      const orderMaterials = (materialsResult.data || []) as Material[];
+      setStockMaterials(orderMaterials);
+      const signedImages = await Promise.all(orderMaterials.filter(m=>m.image_path).map(async m=>{
+        const {data} = await supabase.storage.from("material-images").createSignedUrl(m.image_path!,3600);
+        return data?.signedUrl ? [m.id,data.signedUrl] as const : null;
+      }));
+      setMaterialImageUrls(Object.fromEntries(signedImages.filter((item):item is readonly [string,string]=>item!==null)));
       if (!rows.length) {
         setMaterialOrderItems([]);
         setMaterialOrderHistory([]);
@@ -846,32 +863,83 @@ export default function Home() {
     }
     setSaving(false);
   }
+  function openNewMaterial() {
+    setEditingMaterialId(null);
+    setMaterialForm({name:"",sku:"",description:"",unit:"un",minimum_quantity:"0"});
+    setMaterialImageFile(null);
+    setMaterialImagePreview("");
+    setRemoveMaterialImage(false);
+    setShowNewMaterial(true);
+  }
+
+  function openEditMaterial(material:Material) {
+    if (!canManageStock) return;
+    setEditingMaterialId(material.id);
+    setMaterialForm({name:material.name,sku:material.sku||"",description:material.description||"",unit:material.unit,minimum_quantity:String(material.minimum_quantity)});
+    setMaterialImageFile(null);
+    setMaterialImagePreview(materialImageUrls[material.id]||"");
+    setRemoveMaterialImage(false);
+    setShowNewMaterial(true);
+  }
+
   async function createMaterial() {
     if (!supabase || !canManageStock) return;
     const name = materialForm.name.trim();
     const minimum = Number(materialForm.minimum_quantity || 0);
     if (!name) { setStockError("Informe o nome do material."); return; }
-    if (!Number.isFinite(minimum) || minimum < 0) { setStockError("Informe um estoque mínimo válido."); return; }
+    if (!editingMaterialId && (!Number.isFinite(minimum) || minimum < 0)) { setStockError("Informe um estoque mínimo válido."); return; }
 
     setStockSaving(true);
     setStockError("");
-    const { error } = await supabase.from("materials").insert({
-      name,
-      sku: materialForm.sku.trim() || null,
-      description: materialForm.description.trim() || null,
-      unit: materialForm.unit.trim() || "un",
-      quantity: 0,
-      minimum_quantity: minimum,
-      active: true
-    });
-    if (error) {
-      setStockError(error.message);
-    } else {
+    let uploadedPath:string|null = null;
+    try {
+      if (materialImageFile) {
+        const targetId = editingMaterialId || crypto.randomUUID();
+        const safeName = materialImageFile.name.normalize("NFD").replace(/[\\u0300-\\u036f]/g,"").replace(/[^a-zA-Z0-9._-]/g,"-");
+        uploadedPath = targetId + "/" + Date.now() + "-" + safeName;
+        const {error:uploadError} = await supabase.storage.from("material-images").upload(uploadedPath,materialImageFile,{upsert:false,contentType:materialImageFile.type});
+        if (uploadError) throw uploadError;
+      }
+
+      if (editingMaterialId) {
+        const current = stockMaterials.find(item=>item.id===editingMaterialId);
+        if (!current) throw new Error("O material selecionado não foi encontrado. Atualize a lista e tente novamente.");
+        const nextImagePath = uploadedPath || (removeMaterialImage ? null : current.image_path);
+        const {error} = await supabase.from("materials").update({
+          name,
+          description:materialForm.description.trim()||null,
+          image_path:nextImagePath
+        }).eq("id",editingMaterialId);
+        if (error) throw error;
+        if (uploadedPath && current.image_path) await supabase.storage.from("material-images").remove([current.image_path]);
+        if (removeMaterialImage && current.image_path) await supabase.storage.from("material-images").remove([current.image_path]);
+      } else {
+        const {error} = await supabase.from("materials").insert({
+          name,
+          sku:materialForm.sku.trim()||null,
+          description:materialForm.description.trim()||null,
+          unit:materialForm.unit.trim()||"un",
+          quantity:0,
+          minimum_quantity:minimum,
+          active:true,
+          image_path:uploadedPath
+        });
+        if (error) throw error;
+      }
+
       setShowNewMaterial(false);
+      setEditingMaterialId(null);
+      setMaterialImageFile(null);
+      setMaterialImagePreview("");
+      setRemoveMaterialImage(false);
       setMaterialForm({name:"",sku:"",description:"",unit:"un",minimum_quantity:"0"});
       await loadStock();
+    } catch (error:any) {
+      if (uploadedPath) await supabase.storage.from("material-images").remove([uploadedPath]);
+      setStockError(error.message || "Não foi possível salvar o material.");
+    } finally {
+      setStockSaving(false);
     }
-    setStockSaving(false);
   }
 
   async function createStockMovement() {
@@ -1210,7 +1278,7 @@ export default function Home() {
             <div><p className="eyebrow">MATERIAIS</p><h1>Estoque</h1><p className="sub">Controle de materiais promocionais, disponibilidade e movimentações.</p></div>
             {canManageStock && <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
               <button className="secondary" onClick={()=>loadStock()} disabled={stockLoading}><RefreshCw size={15}/> Atualizar</button>
-              <button className="secondary" onClick={()=>setShowNewMaterial(true)}><Plus size={16}/> Novo material</button>
+              <button className="secondary" onClick={openNewMaterial}><Plus size={16}/> Novo material</button>
               <button className="primary" onClick={()=>{setMovementForm(old=>({...old,material_id:old.material_id||stockMaterials[0]?.id||""}));setShowStockMovement(true)}} disabled={!stockMaterials.length}><ArrowUpRight size={16}/> Nova movimentação</button>
             </div>}
           </div>
@@ -1273,13 +1341,13 @@ export default function Home() {
                   const available = Number(m.quantity)-reserved;
                   const low = canManageStock && available <= Number(m.minimum_quantity);
                   return <tr key={m.id}>
-                    <td><b>{m.name}</b>{m.description&&<span style={{display:"block",fontSize:12,color:"#667085",marginTop:3}}>{m.description}</span>}</td>
+                    <td><div style={{display:"flex",alignItems:"center",gap:10}}>{materialImageUrls[m.id]?<img src={materialImageUrls[m.id]} alt="" style={{width:44,height:44,objectFit:"cover",borderRadius:8,border:"1px solid #e7e8ef",flexShrink:0}}/>:<span style={{width:44,height:44,borderRadius:8,background:"#f5f1fa",display:"grid",placeItems:"center",color:"#8a62b1",flexShrink:0}}><Package size={18}/></span>}<div><b>{m.name}</b>{m.description&&<span style={{display:"block",fontSize:12,color:"#667085",marginTop:3}}>{m.description}</span>}</div></div></td>
                     <td>{m.sku||"—"}</td>
                     <td>{Number(m.quantity).toLocaleString("pt-BR",{maximumFractionDigits:2})} {m.unit}</td>
                     {canManageStock&&<><td>{reserved.toLocaleString("pt-BR",{maximumFractionDigits:2})} {m.unit}</td><td><b>{available.toLocaleString("pt-BR",{maximumFractionDigits:2})} {m.unit}</b></td></>}
                     <td>{Number(m.minimum_quantity).toLocaleString("pt-BR",{maximumFractionDigits:2})} {m.unit}</td>
                     <td><span className={`status ${low?"red":"green"}`}>{low?"Estoque baixo":"Regular"}</span></td>
-                    {canManageStock&&<td><button className="textButton" onClick={()=>{setMovementForm({material_id:m.id,movement_type:"entrada",quantity:"",request_id:"",notes:""});setShowStockMovement(true)}}>Movimentar</button></td>}
+                    {canManageStock&&<td><div style={{display:"flex",alignItems:"center",gap:10}}><button className="textButton" onClick={()=>openEditMaterial(m)}>Editar</button><button className="textButton" onClick={()=>{setMovementForm({material_id:m.id,movement_type:"entrada",quantity:"",request_id:"",notes:""});setShowStockMovement(true)}}>Movimentar</button></div></td>}
                   </tr>;
                 })}
               </tbody></table></div>}
@@ -1435,16 +1503,19 @@ export default function Home() {
       <div className="modalActions"><button type="button" className="secondary" onClick={()=>setShowNewMaterialOrder(false)}>Cancelar</button><button type="button" className="primary" onClick={createMaterialOrder} disabled={ordersSaving||!stockMaterials.length||!orderAreaId}>{ordersSaving?"Enviando pedido...":"Enviar para aprovação"}</button></div>
     </div></div>}
     {showNewMaterial&&<div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setShowNewMaterial(false)}}><div className="modal">
-      <div className="modalHead"><div><h2>Novo material</h2><p>O cadastro começa com estoque físico zero. A quantidade inicial será registrada como entrada.</p></div><button className="iconButton" onClick={()=>setShowNewMaterial(false)}><X/></button></div>
+      <div className="modalHead"><div><h2>{editingMaterialId?"Editar material":"Novo material"}</h2><p>{editingMaterialId?"Atualize o nome, a descrição ou a imagem. Os dados de estoque e o SKU serão preservados.":"O cadastro começa com estoque físico zero. A quantidade inicial será registrada como entrada."}</p></div><button className="iconButton" onClick={()=>setShowNewMaterial(false)}><X/></button></div>
       <div className="formGrid">
         <label className="full">Nome do material<input value={materialForm.name} onChange={e=>setMaterialForm({...materialForm,name:e.target.value})} placeholder="Ex.: Sacola promocional"/></label>
-        <label>Código / SKU<input value={materialForm.sku} onChange={e=>setMaterialForm({...materialForm,sku:e.target.value})} placeholder="Opcional"/></label>
+        {!editingMaterialId&&<><label>Código / SKU<input value={materialForm.sku} onChange={e=>setMaterialForm({...materialForm,sku:e.target.value})} placeholder="Opcional"/></label>
         <label>Unidade de medida<input value={materialForm.unit} onChange={e=>setMaterialForm({...materialForm,unit:e.target.value})} placeholder="un, pct, cx..."/></label>
-        <label>Estoque mínimo<input type="number" min="0" step="0.01" value={materialForm.minimum_quantity} onChange={e=>setMaterialForm({...materialForm,minimum_quantity:e.target.value})}/></label>
+        <label>Estoque mínimo<input type="number" min="0" step="0.01" value={materialForm.minimum_quantity} onChange={e=>setMaterialForm({...materialForm,minimum_quantity:e.target.value})}/></label></>}
         <label className="full">Descrição<textarea rows={3} value={materialForm.description} onChange={e=>setMaterialForm({...materialForm,description:e.target.value})} placeholder="Informações adicionais sobre o material..."/></label>
+        <label className="full">Imagem do material<input type="file" accept="image/jpeg,image/png,image/webp" onChange={e=>{const file=e.target.files?.[0]||null;if(file){if(file.size>5*1024*1024){setStockError("A imagem deve ter no máximo 5 MB.");e.currentTarget.value="";return;}setMaterialImageFile(file);setMaterialImagePreview(URL.createObjectURL(file));setRemoveMaterialImage(false);}}}/><small>JPG, PNG ou WebP. Tamanho máximo: 5 MB.</small></label>
       </div>
-      <div className="notice" style={{marginTop:14}}>Estoque inicial: <b>0 {materialForm.unit||"un"}</b>. Para adicionar quantidade, registre uma movimentação do tipo Entrada após cadastrar.</div>
-      <div className="modalActions"><button className="secondary" onClick={()=>setShowNewMaterial(false)}>Cancelar</button><button className="primary" onClick={createMaterial} disabled={stockSaving||!materialForm.name.trim()}>{stockSaving?"Salvando...":"Cadastrar material"}</button></div>
+      {materialImagePreview&&<div style={{marginTop:14,display:"flex",alignItems:"center",gap:12}}><img src={materialImagePreview} alt="Pré-visualização da imagem do material" style={{width:92,height:92,objectFit:"cover",borderRadius:10,border:"1px solid #e7e8ef"}}/><button type="button" className="secondary" onClick={()=>{setMaterialImageFile(null);setMaterialImagePreview("");setRemoveMaterialImage(true);}}>Remover imagem</button></div>}
+      {editingMaterialId&&!materialImagePreview&&<div className="notice" style={{marginTop:12}}>Nenhuma imagem selecionada. Selecione um arquivo para adicionar uma imagem.</div>}
+      {!editingMaterialId&&<div className="notice" style={{marginTop:14}}>Estoque inicial: <b>0 {materialForm.unit||"un"}</b>. Para adicionar quantidade, registre uma movimentação do tipo Entrada após cadastrar.</div>}
+      <div className="modalActions"><button className="secondary" onClick={()=>setShowNewMaterial(false)}>Cancelar</button><button className="primary" onClick={createMaterial} disabled={stockSaving||!materialForm.name.trim()}>{stockSaving?"Salvando...":editingMaterialId?"Salvar alterações":"Cadastrar material"}</button></div>
     </div></div>}
     {showStockMovement&&<div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setShowStockMovement(false)}}><div className="modal">
       <div className="modalHead"><div><h2>Nova movimentação</h2><p>Registre entradas, saídas ou ajustes físicos. Reservas são controladas em Pedidos de Materiais.</p></div><button className="iconButton" onClick={()=>setShowStockMovement(false)}><X/></button></div>
