@@ -1451,7 +1451,16 @@ export default function Home() {
               )}<Pagination {...paginationProps("stockAlerts",stockAlerts.length)}/>
             </div>
           </>}
-          {canManageStock && stockSection==="consumo" && <section className="panel" style={{marginBottom:18,padding:22,border:"1px solid #e7e8ef",background:"linear-gradient(135deg,#fff 0%,#fcfbff 100%)"}}>
+          {canManageStock && stockSection==="consumo" && <>
+            <style>{`
+              .stockReportGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(185px,1fr));gap:14px;align-items:start}
+              .stockReportFieldLabel{display:block;margin:0 0 9px;color:#565568;font-size:11px;font-weight:700;letter-spacing:.035em;text-transform:uppercase}
+              .stockReportControl{width:100%;height:43px;box-sizing:border-box;border:1px solid #e1e2ea;border-radius:10px;background:#fff;padding:0 12px;color:#292837;font-size:13px;font-weight:500;font-family:inherit;outline:none;transition:border-color .15s,box-shadow .15s}
+              .stockReportControl:focus{border-color:#9b5cdb;box-shadow:0 0 0 3px rgba(122,27,216,.10)}
+              @media(max-width:700px){.stockReportGrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+              @media(max-width:520px){.stockReportGrid{grid-template-columns:1fr}}
+            `}</style>
+            <section className="panel" style={{marginBottom:18,padding:22,border:"1px solid #e7e8ef",background:"linear-gradient(135deg,#fff 0%,#fcfbff 100%)"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:14,flexWrap:"wrap",marginBottom:18}}>
               <div style={{display:"flex",alignItems:"center",gap:11}}><span style={{width:38,height:38,display:"grid",placeItems:"center",borderRadius:12,background:"#f2eaff",color:"#7a1bd8"}}><BarChart3 size={19}/></span><div><h3 style={{margin:"0 0 4px",fontSize:15}}>Análise de consumo</h3><p style={{margin:0,fontSize:12,color:"#858397"}}>Acompanhe as saídas efetivas de materiais por período e identifique os itens de maior consumo.</p></div></div>
               <button className="secondary" onClick={exportStockConsumption} disabled={!filteredConsumptionMovements.length}><Download size={15}/> Exportar CSV</button>
@@ -1474,7 +1483,8 @@ export default function Home() {
             <div style={{marginTop:18,border:"1px solid #eeeaf3",borderRadius:12,overflow:"hidden"}}><div style={{padding:"14px 16px",display:"flex",justifyContent:"space-between",gap:10,flexWrap:"wrap",borderBottom:"1px solid #eeeaf3"}}><div><h4 style={{fontSize:13,margin:"0 0 4px"}}>Detalhamento do consumo</h4><p style={{fontSize:11,color:"#858397",margin:0}}>Cada linha representa uma movimentação efetiva do tipo saída.</p></div><span className="muted">{filteredConsumptionMovements.length} registro(s)</span></div>
               {!filteredConsumptionMovements.length?<div className="emptyTable">Nenhum consumo encontrado para os filtros selecionados.</div>:<div className="tableWrap"><table><thead><tr><th>Data</th><th>Material</th><th>Quantidade</th><th>Origem</th><th>Observações</th></tr></thead><tbody>{pageItems("stockConsumption",filteredConsumptionMovements).map(movement=>{const material=stockMaterials.find(item=>item.id===movement.material_id);const request=tasks.find(item=>item.id===movement.request_id);return <tr key={movement.id}><td>{new Date(movement.created_at).toLocaleString("pt-BR")}</td><td>{material?.name||"Material não encontrado"}</td><td><b>{Math.abs(Number(movement.quantity)||0).toLocaleString("pt-BR",{maximumFractionDigits:2})} {material?.unit||""}</b></td><td>{request?"Solicitação #"+request.protocol:movement.material_order_id?"Pedido de materiais":"Movimentação manual"}</td><td>{movement.notes||"—"}</td></tr>})}</tbody></table></div>}<Pagination {...paginationProps("stockConsumption",filteredConsumptionMovements.length)}/>
             </div><p style={{fontSize:11,color:"#858397",margin:"12px 0 0"}}>Critério: somente movimentações do tipo saída entram no cálculo. Reservas, cancelamentos de reserva e ajustes não são considerados consumo.</p>
-          </section>}
+          </section>
+          </>}
           {stockSection==="materiais" && <div className="panel">
             <div className="panelHead"><div><h3>Materiais cadastrados</h3><p>{canManageStock?"Estoque físico, reservas e saldo disponível.":"Consulta dos saldos físicos cadastrados."}</p></div><span className="muted">{filteredMaterials.length} material(is)</span></div>
             <div className="toolbar">
