@@ -6,7 +6,7 @@ import {
   Activity, BarChart3, CalendarDays, CheckCircle2, ChevronDown, ClipboardList,
   Clock3, Download, LayoutDashboard, LogOut, Menu, Package, Plus, Search, Settings,
   Users, X, AlertTriangle, Layers, ArrowUpRight, RefreshCw, ClipboardCheck, PackageCheck, History,
-  MessageCircle, Send, Bell
+  MessageCircle, Send, Bell, ShieldCheck, FileSearch
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
@@ -44,6 +44,7 @@ type MaterialOrder = { id:string; protocol:number; requester_id:string; area_id:
 type MaterialOrderItem = { id:string; order_id:string; material_id:string; quantity:number; material?:{name:string;unit:string;sku:string|null} };
 type MaterialOrderHistory = { id:string; order_id:string; actor_id:string|null; action:string; previous_status:string|null; new_status:string|null; details:string|null; created_at:string; actor_name?:string };
 type AppNotification = { id:string; title:string; message:string; notification_type:string; material_order_id:string|null; is_read:boolean; created_at:string };
+type AuditLog = { id:string; actor_id:string|null; actor_name:string|null; actor_email:string|null; action:"INSERT"|"UPDATE"|"DELETE"; table_name:string; record_id:string|null; old_values:Record<string,any>|null; new_values:Record<string,any>|null; created_at:string };
 
 const statusToDb: Record<Status,string> = { "Recebida":"recebida", "Em análise":"em_analise", "Aguardando aprovação":"aguardando_aprovacao", "Em execução":"em_execucao", "Concluída":"concluida", "Cancelada":"cancelada" };
 const dbToStatus: Record<string,Status> = { recebida:"Recebida", em_analise:"Em análise", aguardando_aprovacao:"Aguardando aprovação", em_execucao:"Em execução", concluida:"Concluída", cancelada:"Cancelada" };
@@ -146,6 +147,15 @@ export default function Home() {
   const [orderPurpose,setOrderPurpose] = useState("");
   const [orderNeededBy,setOrderNeededBy] = useState("");
   const [orderDraftItems,setOrderDraftItems] = useState<{material_id:string;quantity:string}[]>([{material_id:"",quantity:"1"}]);
+  const [auditLogs,setAuditLogs] = useState<AuditLog[]>([]);
+  const [auditLoading,setAuditLoading] = useState(false);
+  const [auditError,setAuditError] = useState("");
+  const [auditSearch,setAuditSearch] = useState("");
+  const [auditActorFilter,setAuditActorFilter] = useState("Todos");
+  const [auditModuleFilter,setAuditModuleFilter] = useState("Todos");
+  const [auditActionFilter,setAuditActionFilter] = useState("Todos");
+  const [auditStartDate,setAuditStartDate] = useState("");
+  const [auditEndDate,setAuditEndDate] = useState("");
 
   useEffect(() => {
     if (!supabase) { setAuthLoading(false); setLoginError("As variáveis do Supabase não foram encontradas. Confira o arquivo .env.local e reinicie o servidor."); return; }
@@ -272,6 +282,20 @@ export default function Home() {
     setCommentsSending(false);
   }
 
+
+  const loadAuditLogs = useCallback(async () => {
+    if (!supabase || profile?.role !== "admin") {
+      setAuditLogs([]);
+      setAuditError("A consulta da auditoria é restrita a administradores.");
+      return;
+    }
+    setAuditLoading(true);
+    setAuditError("");
+    const {data,error} = await supabase.from("audit_logs").select("id,actor_id,actor_name,actor_email,action,table_name,record_id,old_values,new_values,created_at").order("created_at",{ascending:false}).limit(500);
+    if (error) { setAuditError("Não foi possível carregar a auditoria: " + error.message); setAuditLogs([]); }
+    else setAuditLogs((data || []) as AuditLog[]);
+    setAuditLoading(false);
+  },[profile?.role]);
 
   const loadNotifications = useCallback(async () => {
     if (!supabase || !profile?.id) {
@@ -479,6 +503,7 @@ export default function Home() {
   useEffect(() => { if (session?.user) loadData(session.user); },[session,loadData]);
   useEffect(() => { if (active === "Estoque" && profile) loadStock(); },[active,profile,loadStock]);
   useEffect(() => { if (active === "Pedidos de Materiais" && profile) loadMaterialOrders(); },[active,profile,loadMaterialOrders]);
+  useEffect(() => { if (active === "Auditoria" && profile?.role === "admin") void loadAuditLogs(); },[active,profile?.role,loadAuditLogs]);
   useEffect(() => { setDeleteConfirm(false); setCompleteConfirm(false); }, [selected?.id]);
   useEffect(() => { if (areas.length && !form.areaId) setForm(old=>({...old,areaId:areas[0].id})); },[areas,form.areaId]);
 
@@ -1098,7 +1123,21 @@ export default function Home() {
   if (authLoading) return <div className="authScreen"><div className="authCard"><div className="brandMark"><Layers size={22}/></div><h1>Gestão de Demandas DelRio</h1><p>Verificando sua sessão...</p></div></div>;
   if (!session) return <div className="authScreen"><form className="authCard" onSubmit={signIn}><div className="authBrand"><div className="brandMark"><Layers size={22}/></div><div><b>DELRIO</b><small>GESTÃO DE DEMANDAS</small></div></div><p className="eyebrow">AMBIENTE DE MARKETING</p><h1>Acesse sua conta</h1><p className="authSub">Entre com seu e-mail e senha cadastrados no sistema.</p><label>E-mail<input type="email" autoComplete="username" value={email} onChange={e=>setEmail(e.target.value)} placeholder="seuemail@delrio.com.br" required/></label><label>Senha<input type="password" autoComplete="current-password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Digite sua senha" required/></label>{loginError&&<div className="errorBox">{loginError}</div>}<button className="primary authSubmit" disabled={loginLoading}>{loginLoading?"Entrando...":"Entrar"}</button><small className="authFoot">Acesso restrito à equipe autorizada.</small></form></div>;
 
-  const nav = [["Dashboard",LayoutDashboard],["Solicitações",ClipboardList],["Pedidos de Materiais",ClipboardCheck],["Cronograma",CalendarDays],["Colaboradores",Users],["Estoque",Package],["Relatórios",BarChart3],["Configurações",Settings]] as const;
+  const nav = [["Dashboard",LayoutDashboard],["Solicitações",ClipboardList],["Pedidos de Materiais",ClipboardCheck],["Cronograma",CalendarDays],["Colaboradores",Users],["Estoque",Package],["Relatórios",BarChart3],["Configurações",Settings],...(profile?.role === "admin" ? [["Auditoria",ShieldCheck] as const] : [])] as const;
+  const auditActors = [...new Set(auditLogs.map(log=>log.actor_name || "Sistema"))].sort((a,b)=>a.localeCompare(b,"pt-BR"));
+  const auditModules = [...new Set(auditLogs.map(log=>log.table_name))].sort((a,b)=>a.localeCompare(b,"pt-BR"));
+  const filteredAuditLogs = auditLogs.filter(log => {
+    const actor = log.actor_name || "Sistema";
+    const haystack = [actor,log.actor_email || "",log.table_name,log.record_id || "",log.action].join(" ").toLowerCase();
+    if (auditSearch.trim() && !haystack.includes(auditSearch.trim().toLowerCase())) return false;
+    if (auditActorFilter !== "Todos" && actor !== auditActorFilter) return false;
+    if (auditModuleFilter !== "Todos" && log.table_name !== auditModuleFilter) return false;
+    if (auditActionFilter !== "Todos" && log.action !== auditActionFilter) return false;
+    const date = log.created_at.slice(0,10);
+    if (auditStartDate && date < auditStartDate) return false;
+    if (auditEndDate && date > auditEndDate) return false;
+    return true;
+  });
   return <main className="shell">
     <aside className={`sidebar ${mobileMenu?"open":""}`}>
       <div className="brand"><div className="brandMark"><Layers size={21}/></div><div><b>DELRIO</b><small>GESTÃO DE DEMANDAS</small></div><button className="closeMenu" onClick={()=>setMobileMenu(false)}><X/></button></div>
@@ -1482,6 +1521,59 @@ export default function Home() {
           <section className="panel reportPanel" style={{marginTop:18}}><div className="reportPanelHead"><div><h3>Detalhamento das solicitações</h3><p>Consulte os registros que compõem os indicadores acima.</p></div></div><TaskTable tasks={[...reportTasks].sort((a,b)=>b.created.localeCompare(a.created))} onSelect={setSelected} unreadCounts={unreadCounts}/></section>
         </>}
         {active==="Configurações" && <><div className="pageHeading"><div><p className="eyebrow">ADMINISTRAÇÃO</p><h1>Configurações</h1><p className="sub">Parâmetros do ambiente e sua conta.</p></div></div><div className="panel"><h3>Áreas cadastradas no Supabase</h3><div className="areaList">{areaNames.map(a=><div key={a}><Layers size={17}/>{a}<span>Ativa</span></div>)}</div><p className="notice">Usuário conectado: {profile?.email}. Perfil: {profile?.role}. A prioridade é controlada por gestores e administradores.</p></div></>}
+        {active==="Auditoria" && profile?.role==="admin" && <>
+          <div className="pageHeading"><div><p className="eyebrow">CONTROLE E RASTREABILIDADE</p><h1>Auditoria</h1><p className="sub">Consulte as ações realizadas nos módulos operacionais e administrativos.</p></div><button className="secondary" type="button" onClick={()=>void loadAuditLogs()} disabled={auditLoading}><RefreshCw size={15}/> {auditLoading?"Atualizando...":"Atualizar histórico"}</button></div>
+          <style>{`
+            .auditFilterCard{padding:22px 24px;margin-bottom:18px;border:1px solid #e7e8ef;background:linear-gradient(135deg,#fff 0%,#fcfbff 100%);box-shadow:0 5px 18px rgba(31,24,55,.035)}
+            .auditFilterTop{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:18px}
+            .auditFilterTitle{display:flex;align-items:center;gap:11px}
+            .auditFilterIcon{width:38px;height:38px;display:grid;place-items:center;border-radius:12px;background:#f2eaff;color:#7a1bd8;flex:none}
+            .auditFilterTitle h3{margin:0 0 4px;font-size:15px;font-weight:700;color:#20202b}
+            .auditFilterTitle p{margin:0;font-size:12px;color:#858397}
+            .auditFilterGrid{display:grid;grid-template-columns:minmax(220px,1.5fr) repeat(3,minmax(145px,1fr));gap:12px;align-items:end}
+            .auditField{display:grid;gap:7px;min-width:0;color:#565568;font-size:11px;font-weight:700}
+            .auditControl{width:100%;height:42px;box-sizing:border-box;border:1px solid #e1e2ea;border-radius:10px;background:#fff;padding:0 11px;color:#292837;font:500 13px inherit;outline:none}
+            .auditControl:focus{border-color:#9b5cdb;box-shadow:0 0 0 3px rgba(122,27,216,.10)}
+            .auditDateGrid{display:grid;grid-template-columns:repeat(2,minmax(150px,1fr));gap:12px;margin-top:14px}
+            .auditFilterBottom{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:16px;padding-top:13px;border-top:1px solid #f0edf4;color:#777487;font-size:12px}
+            .auditTableWrap{overflow:auto;width:100%}.auditTable{width:100%;border-collapse:collapse;min-width:900px}
+            .auditTable th{padding:12px 13px;text-align:left;background:#faf9fc;color:#777487;font-size:10px;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap}
+            .auditTable td{padding:13px;border-top:1px solid #f0edf4;color:#454253;font-size:12px;vertical-align:top}
+            .auditActor{display:grid;gap:3px;min-width:145px}.auditActor b{color:#292536;font-size:12px}.auditActor small{color:#858397;font-size:10px}
+            .auditAction{display:inline-flex;padding:5px 8px;border-radius:7px;background:#f2eaff;color:#7020c5;font-size:10px;font-weight:800}.auditAction.delete{background:#fff0f0;color:#b42318}.auditAction.insert{background:#ecfdf3;color:#027a48}
+            .auditDetails{min-width:250px}.auditDetails summary{color:#7020c5;font-weight:700;cursor:pointer;list-style:none}.auditDetails summary::-webkit-details-marker{display:none}
+            .auditDiff{display:grid;gap:7px;margin-top:10px;max-width:430px}.auditDiffRow{padding:8px 9px;border:1px solid #eee8f5;border-radius:8px;background:#fcfbfe;overflow-wrap:anywhere}.auditDiffRow b{display:block;margin-bottom:4px;color:#5b5368;font-size:10px}.auditDiffRow span{display:block;color:#454253;font-size:11px;line-height:1.45}
+            .auditEmpty{padding:32px 18px;text-align:center;color:#858397;font-size:13px}
+            @media(max-width:900px){.auditFilterGrid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:560px){.auditFilterCard{padding:17px}.auditFilterGrid,.auditDateGrid{grid-template-columns:1fr}.auditFilterTop{flex-direction:column}}
+          `}</style>
+          <section className="panel auditFilterCard">
+            <div className="auditFilterTop"><div className="auditFilterTitle"><span className="auditFilterIcon"><FileSearch size={19}/></span><div><h3>Filtros do histórico</h3><p>Refine os registros por período, colaborador, módulo ou operação.</p></div></div><button type="button" className="dashClear" onClick={()=>{setAuditSearch("");setAuditActorFilter("Todos");setAuditModuleFilter("Todos");setAuditActionFilter("Todos");setAuditStartDate("");setAuditEndDate("")}}>Limpar filtros</button></div>
+            <div className="auditFilterGrid">
+              <label className="auditField">Buscar registro<input className="auditControl" value={auditSearch} onChange={e=>setAuditSearch(e.target.value)} placeholder="Nome, e-mail ou identificador..."/></label>
+              <label className="auditField">Colaborador<select className="auditControl" value={auditActorFilter} onChange={e=>setAuditActorFilter(e.target.value)}><option value="Todos">Todos</option>{auditActors.map(actor=><option key={actor} value={actor}>{actor}</option>)}</select></label>
+              <label className="auditField">Módulo<select className="auditControl" value={auditModuleFilter} onChange={e=>setAuditModuleFilter(e.target.value)}><option value="Todos">Todos</option>{auditModules.map(module=><option key={module} value={module}>{module.replaceAll("_"," ")}</option>)}</select></label>
+              <label className="auditField">Tipo de ação<select className="auditControl" value={auditActionFilter} onChange={e=>setAuditActionFilter(e.target.value)}><option value="Todos">Todas</option><option value="INSERT">Inclusão</option><option value="UPDATE">Alteração</option><option value="DELETE">Exclusão</option></select></label>
+            </div>
+            <div className="auditDateGrid"><label className="auditField">Data inicial<input className="auditControl" type="date" value={auditStartDate} onChange={e=>setAuditStartDate(e.target.value)}/></label><label className="auditField">Data final<input className="auditControl" type="date" min={auditStartDate||undefined} value={auditEndDate} onChange={e=>setAuditEndDate(e.target.value)}/></label></div>
+            <div className="auditFilterBottom"><span><b>{filteredAuditLogs.length}</b> registro(s) exibido(s)</span><span>Consulta dos 500 registros mais recentes</span></div>
+          </section>
+          {auditError&&<div className="errorBanner" style={{marginBottom:16}}>{auditError}</div>}
+          <section className="panel">
+            <div className="panelHead"><div><h3>Histórico de operações</h3><p>Valores anteriores e novos ficam disponíveis em cada registro.</p></div><span className="muted">{auditLogs.length} carregados</span></div>
+            {auditLoading&&!auditLogs.length?<div className="auditEmpty">Carregando histórico de auditoria...</div>:!filteredAuditLogs.length?<div className="auditEmpty">Nenhum registro encontrado com os filtros selecionados.</div>:<div className="auditTableWrap"><table className="auditTable"><thead><tr><th>Data e hora</th><th>Colaborador</th><th>Ação</th><th>Módulo</th><th>Registro</th><th>Detalhes</th></tr></thead><tbody>
+              {filteredAuditLogs.map(log=>{
+                const oldValues=log.old_values||{};const newValues=log.new_values||{};
+                const keys=[...new Set([...Object.keys(oldValues),...Object.keys(newValues)])].filter(key=>!["created_at","updated_at"].includes(key));
+                const displayValue=(value:any)=>value===null||value===undefined?"—":typeof value==="object"?JSON.stringify(value):String(value);
+                const changes=keys.filter(key=>JSON.stringify(oldValues[key])!==JSON.stringify(newValues[key]));
+                return <tr key={log.id}><td style={{whiteSpace:"nowrap"}}>{new Date(log.created_at).toLocaleString("pt-BR")}</td><td><div className="auditActor"><b>{log.actor_name||"Sistema"}</b><small>{log.actor_email||"Ação automática"}</small></div></td><td><span className={`auditAction ${log.action.toLowerCase()}`}>{log.action==="INSERT"?"Inclusão":log.action==="UPDATE"?"Alteração":"Exclusão"}</span></td><td style={{whiteSpace:"nowrap",textTransform:"capitalize"}}>{log.table_name.replaceAll("_"," ")}</td><td style={{fontFamily:"monospace",fontSize:10}}>{log.record_id||"—"}</td><td><details className="auditDetails"><summary>Ver {changes.length||keys.length} campo(s)</summary><div className="auditDiff">
+                  {(log.action==="INSERT"?Object.keys(newValues):log.action==="DELETE"?Object.keys(oldValues):changes).filter(key=>!["created_at","updated_at"].includes(key)).map(key=><div className="auditDiffRow" key={key}><b>{key.replaceAll("_"," ")}</b><span>{log.action==="INSERT"?"Novo valor: "+displayValue(newValues[key]):log.action==="DELETE"?"Valor removido: "+displayValue(oldValues[key]):"Anterior: "+displayValue(oldValues[key])+" · Novo: "+displayValue(newValues[key])}</span></div>)}
+                  {keys.length===0&&<span>Não há campos detalhados neste registro.</span>}
+                </div></details></td></tr>;
+              })}
+            </tbody></table></div>}
+          </section>
+        </>}
       </div>
     </section>
     {showNewMaterialOrder&&<div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setShowNewMaterialOrder(false)}}><div className="modal orderModal" style={{maxWidth:760}}>
