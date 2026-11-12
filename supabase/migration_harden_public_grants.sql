@@ -30,7 +30,7 @@ REVOKE ALL PRIVILEGES ON FUNCTION public.admin_update_profile_areas(uuid, text, 
 GRANT EXECUTE ON FUNCTION public.admin_update_profile_areas(uuid, text, public.app_role, uuid[], boolean)
   TO authenticated;
 
--- 3. Helpers usados pela aplicação/policies: acesso explícito apenas autenticado.
+-- 7. Helpers usados pela aplicação/policies: acesso explícito apenas autenticado.
 REVOKE ALL PRIVILEGES ON FUNCTION public.can_access_request(uuid)
   FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.can_access_request(uuid) TO authenticated;
@@ -55,7 +55,7 @@ REVOKE ALL PRIVILEGES ON FUNCTION public.is_active_user()
   FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.is_active_user() TO authenticated;
 
--- 4. Funções chamadas exclusivamente por triggers: não devem ser RPCs públicas.
+-- 8. Funções chamadas exclusivamente por triggers: não devem ser RPCs públicas.
 REVOKE ALL PRIVILEGES ON FUNCTION public.assign_request_owner()
   FROM PUBLIC, anon, authenticated;
 
