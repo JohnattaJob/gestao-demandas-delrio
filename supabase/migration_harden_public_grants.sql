@@ -1,7 +1,8 @@
 -- Hardening das permissões do schema public.
 -- Remove acesso anônimo às tabelas e privilégios estruturais desnecessários
 -- de authenticated, preservando os privilégios DML sujeitos às policies RLS.
--- Restringe funções internas de trigger e explicita os acessos dos helpers/RPCs.
+-- Ajusta privilégios padrão dos objetos criados pelo papel postgres.
+-- O papel atual não pode alterar os privilégios padrão de supabase_admin.
 
 BEGIN;
 
@@ -21,13 +22,11 @@ REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM anon;
 REVOKE UPDATE ON ALL SEQUENCES IN SCHEMA public FROM authenticated;
 
 -- EXECUTE é concedido a PUBLIC por padrão global no PostgreSQL.
--- A revogação precisa ser global; a revogação por schema não cancela esse padrão.
+-- Remove esse padrão para funções futuras criadas por postgres.
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres
   REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
-ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin
-  REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
 
--- Corrige privilégios padrão para objetos futuros criados por postgres.
+-- 2. Corrige privilégios padrão para objetos futuros criados por postgres.
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
   REVOKE ALL PRIVILEGES ON TABLES FROM anon;
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
@@ -37,18 +36,6 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
   REVOKE UPDATE ON SEQUENCES FROM authenticated;
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
-  REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC, anon, authenticated;
-
--- Repete as proteções para objetos futuros criados por supabase_admin.
-ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
-  REVOKE ALL PRIVILEGES ON TABLES FROM anon;
-ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
-  REVOKE TRUNCATE, REFERENCES, TRIGGER, MAINTAIN ON TABLES FROM authenticated;
-ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
-  REVOKE ALL PRIVILEGES ON SEQUENCES FROM anon;
-ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
-  REVOKE UPDATE ON SEQUENCES FROM authenticated;
-ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
   REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC, anon, authenticated;
 
 -- 3. Funções administrativas: somente authenticated pode invocá-las.
