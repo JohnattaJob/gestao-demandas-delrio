@@ -10,11 +10,41 @@ REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM anon;
 
 -- Usuários autenticados não precisam de privilégios estruturais sobre tabelas.
 -- INSERT/SELECT/UPDATE/DELETE existentes são preservados e continuam sujeitos ao RLS.
-REVOKE TRUNCATE, REFERENCES, TRIGGER
+-- MAINTAIN também é removido (PostgreSQL 17).
+REVOKE TRUNCATE, REFERENCES, TRIGGER, MAINTAIN
   ON ALL TABLES IN SCHEMA public
   FROM authenticated;
 
--- 2. Funções administrativas: somente authenticated pode invocá-las.
+-- Sequências: anon não deve acessá-las; authenticated mantém SELECT/USAGE
+-- para não interromper colunas identity/serial, mas não pode alterar a sequência.
+REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM anon;
+REVOKE UPDATE ON ALL SEQUENCES IN SCHEMA public FROM authenticated;
+
+-- Corrige privilégios padrão para objetos futuros criados por postgres.
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+  REVOKE ALL PRIVILEGES ON TABLES FROM anon;
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+  REVOKE TRUNCATE, REFERENCES, TRIGGER, MAINTAIN ON TABLES FROM authenticated;
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+  REVOKE ALL PRIVILEGES ON SEQUENCES FROM anon;
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+  REVOKE UPDATE ON SEQUENCES FROM authenticated;
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+  REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC, anon, authenticated;
+
+-- Repete as proteções para objetos futuros criados por supabase_admin.
+ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
+  REVOKE ALL PRIVILEGES ON TABLES FROM anon;
+ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
+  REVOKE TRUNCATE, REFERENCES, TRIGGER, MAINTAIN ON TABLES FROM authenticated;
+ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
+  REVOKE ALL PRIVILEGES ON SEQUENCES FROM anon;
+ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
+  REVOKE UPDATE ON SEQUENCES FROM authenticated;
+ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public
+  REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC, anon, authenticated;
+
+-- 3. Funções administrativas: somente authenticated pode invocá-las.
 REVOKE ALL PRIVILEGES ON FUNCTION public.admin_set_stock_permission(uuid, boolean)
   FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.admin_set_stock_permission(uuid, boolean)
@@ -30,7 +60,7 @@ REVOKE ALL PRIVILEGES ON FUNCTION public.admin_update_profile_areas(uuid, text, 
 GRANT EXECUTE ON FUNCTION public.admin_update_profile_areas(uuid, text, public.app_role, uuid[], boolean)
   TO authenticated;
 
--- 7. Helpers usados pela aplicação/policies: acesso explícito apenas autenticado.
+-- 4. Helpers usados pela aplicação/policies: acesso explícito apenas autenticado.
 REVOKE ALL PRIVILEGES ON FUNCTION public.can_access_request(uuid)
   FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.can_access_request(uuid) TO authenticated;
@@ -55,7 +85,7 @@ REVOKE ALL PRIVILEGES ON FUNCTION public.is_active_user()
   FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.is_active_user() TO authenticated;
 
--- 8. Funções chamadas exclusivamente por triggers: não devem ser RPCs públicas.
+-- 5. Funções chamadas exclusivamente por triggers: não devem ser RPCs públicas.
 REVOKE ALL PRIVILEGES ON FUNCTION public.assign_request_owner()
   FROM PUBLIC, anon, authenticated;
 
