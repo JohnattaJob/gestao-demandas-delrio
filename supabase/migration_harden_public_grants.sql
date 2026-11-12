@@ -20,6 +20,13 @@ REVOKE TRUNCATE, REFERENCES, TRIGGER, MAINTAIN
 REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM anon;
 REVOKE UPDATE ON ALL SEQUENCES IN SCHEMA public FROM authenticated;
 
+-- EXECUTE é concedido a PUBLIC por padrão global no PostgreSQL.
+-- A revogação precisa ser global; a revogação por schema não cancela esse padrão.
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres
+  REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
+ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin
+  REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
+
 -- Corrige privilégios padrão para objetos futuros criados por postgres.
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
   REVOKE ALL PRIVILEGES ON TABLES FROM anon;
