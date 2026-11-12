@@ -121,6 +121,7 @@ export default function Home() {
   const [stockMovements,setStockMovements] = useState<StockMovement[]>([]);
   const [stockLoading,setStockLoading] = useState(false);
   const [stockError,setStockError] = useState("");
+  const [movementError,setMovementError] = useState("");
   const [stockSaving,setStockSaving] = useState(false);
   const [showNewMaterial,setShowNewMaterial] = useState(false);
   const [editingMaterialId,setEditingMaterialId] = useState<string|null>(null);
@@ -1030,15 +1031,15 @@ export default function Home() {
   async function createStockMovement() {
     if (!supabase || !canManageStock) return;
     const amount = Number(movementForm.quantity);
-    if (!movementForm.material_id) { setStockError("Selecione um material."); return; }
+    if (!movementForm.material_id) { setMovementError("Selecione um material."); return; }
     if (!Number.isFinite(amount) || amount < 0 || (movementForm.movement_type !== "ajuste" && amount <= 0)) {
-      setStockError(movementForm.movement_type === "ajuste"
+      setMovementError(movementForm.movement_type === "ajuste"
         ? "Informe um saldo físico contado válido (zero ou maior)."
         : "Informe uma quantidade maior que zero.");
       return;
     }
     setStockSaving(true);
-    setStockError("");
+    setMovementError("");
     const { data, error } = await supabase.rpc("register_stock_movement", {
       p_material_id: movementForm.material_id,
       p_movement_type: movementForm.movement_type,
@@ -1047,8 +1048,9 @@ export default function Home() {
       p_notes: movementForm.notes.trim() || null
     });
     if (error) {
-      setStockError(error.message);
+      setMovementError(error.message);
     } else {
+      setMovementError("");
       setShowStockMovement(false);
       setMovementForm(old => ({...old,quantity:"",request_id:"",notes:""}));
       await loadStock();
@@ -1399,7 +1401,7 @@ export default function Home() {
             {canManageStock && <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
               <button className="secondary" onClick={()=>loadStock()} disabled={stockLoading}><RefreshCw size={15}/> Atualizar</button>
               {stockSection==="materiais" && <><button className="secondary" onClick={openNewMaterial}><Plus size={16}/> Novo material</button>
-              <button className="primary" onClick={()=>{setMovementForm(old=>({...old,material_id:old.material_id||stockMaterials[0]?.id||""}));setShowStockMovement(true)}} disabled={!stockMaterials.length}><ArrowUpRight size={16}/> Nova movimentação</button></>}
+              <button className="primary" onClick={()=>{setMovementError("");setMovementForm(old=>({...old,material_id:old.material_id||stockMaterials[0]?.id||""}));setShowStockMovement(true)}} disabled={!stockMaterials.length}><ArrowUpRight size={16}/> Nova movimentação</button></>}
             </div>}
           </div>
           {stockError && <div className="errorBanner"><span>{stockError}</span><button onClick={()=>setStockError("")}>Fechar</button></div>}
@@ -1725,8 +1727,9 @@ export default function Home() {
       {!editingMaterialId&&<div className="notice" style={{marginTop:14}}>Estoque inicial: <b>0 {materialForm.unit||"un"}</b>. Para adicionar quantidade, registre uma movimentação do tipo Entrada após cadastrar.</div>}
       <div className="modalActions"><button className="secondary" onClick={()=>setShowNewMaterial(false)}>Cancelar</button><button className="primary" onClick={createMaterial} disabled={stockSaving||!materialForm.name.trim()}>{stockSaving?"Salvando...":editingMaterialId?"Salvar alterações":"Cadastrar material"}</button></div>
     </div></div>}
-    {showStockMovement&&<div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setShowStockMovement(false)}}><div className="modal">
-      <div className="modalHead"><div><h2>Nova movimentação</h2><p>Registre entradas, saídas ou ajustes físicos. Reservas são controladas em Pedidos de Materiais.</p></div><button className="iconButton" onClick={()=>setShowStockMovement(false)}><X/></button></div>
+    {showStockMovement&&<div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget){setShowStockMovement(false);setMovementError("");}}}><div className="modal">
+      <div className="modalHead"><div><h2>Nova movimentação</h2><p>Registre entradas, saídas ou ajustes físicos. Reservas são controladas em Pedidos de Materiais.</p></div><button className="iconButton" onClick={()=>{setShowStockMovement(false);setMovementError("");}}><X/></button></div>
+      {movementError&&<div className="errorBox" role="alert" style={{marginBottom:14}}>{movementError}</div>}
       <div className="formGrid">
         <label className="full">Material<select value={movementForm.material_id} onChange={e=>setMovementForm({...movementForm,material_id:e.target.value})}>{stockMaterials.map(m=><option key={m.id} value={m.id}>{m.name} · saldo físico: {Number(m.quantity).toLocaleString("pt-BR",{maximumFractionDigits:2})} {m.unit}</option>)}</select></label>
         <label className="full">Tipo de movimentação<select value={movementForm.movement_type} onChange={e=>setMovementForm({...movementForm,movement_type:e.target.value as StockMovement["movement_type"],quantity:"",request_id:""})}>
@@ -1738,7 +1741,7 @@ export default function Home() {
         <label className="full">Observações<textarea rows={3} value={movementForm.notes} onChange={e=>setMovementForm({...movementForm,notes:e.target.value})} placeholder="Motivo ou detalhes da movimentação..."/></label>
       </div>
       {movementForm.movement_type==="ajuste"&&<div className="notice" style={{marginTop:12}}>Informe o saldo físico total encontrado na contagem. O sistema calculará e registrará automaticamente a diferença.</div>}
-      <div className="modalActions"><button className="secondary" onClick={()=>setShowStockMovement(false)}>Cancelar</button><button className="primary" onClick={createStockMovement} disabled={stockSaving||!movementForm.material_id||movementForm.quantity===""}>{stockSaving?"Registrando...":"Registrar movimentação"}</button></div>
+      <div className="modalActions"><button className="secondary" onClick={()=>{setShowStockMovement(false);setMovementError("");}}>Cancelar</button><button className="primary" onClick={createStockMovement} disabled={stockSaving||!movementForm.material_id||movementForm.quantity===""}>{stockSaving?"Registrando...":"Registrar movimentação"}</button></div>
     </div></div>}
     {showNew&&<div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setShowNew(false)}}><div className="modal"><div className="modalHead"><div><h2>Nova solicitação</h2><p>Preencha os dados para registrar uma demanda.</p></div><button className="iconButton" onClick={()=>setShowNew(false)}><X/></button></div><div className="formGrid"><label className="full">Título da solicitação<input value={form.title} onChange={e=>setForm({...form,title:e.target.value})} placeholder="Ex.: Criar material para campanha"/></label><label>Área responsável<select value={form.areaId} onChange={e=>setForm({...form,areaId:e.target.value})}>{areas.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label><label>Responsável<select value={form.ownerId} onChange={e=>setForm({...form,ownerId:e.target.value})} disabled={areaMembers.length===1 || areaMembers.length===0}><option value="">{areaMembers.length===1?"Atribuído automaticamente":"Selecione um responsável"}</option>{areaMembers.map(m=><option key={m.profile_id} value={m.profile_id}>{m.full_name}</option>)}</select><small>{areaMembers.length===1?`Responsável definido automaticamente: ${areaMembers[0].full_name}.`:areaMembers.length>1?"Selecione um dos responsáveis disponíveis nesta área.":"Carregando responsáveis ou nenhum integrante ativo encontrado."}</small></label><label>Prioridade<select value={form.priority} disabled={!isManager} onChange={e=>setForm({...form,priority:e.target.value as Priority})}>{(["Baixa","Média","Alta","Urgente"] as Priority[]).map(p=><option key={p}>{p}</option>)}</select><small>{isManager?"Definida pelo gestor.":"A prioridade será definida pelo gestor."}</small></label><label>Prazo de entrega<input type="date" value={form.due} onChange={e=>setForm({...form,due:e.target.value})}/></label><label className="full">Descrição<textarea rows={4} value={form.description} onChange={e=>setForm({...form,description:e.target.value})} placeholder="Descreva o que precisa ser realizado..."/></label></div><div className="modalActions"><button className="secondary" onClick={()=>setShowNew(false)}>Cancelar</button><button className="primary" onClick={createTask} disabled={saving||!form.title.trim()||!form.due||!form.areaId||areaMembers.length===0||(areaMembers.length>1&&!form.ownerId)}>{saving?"Salvando...":"Criar solicitação"}</button></div></div></div>}
     {selectedMember&&<div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setSelectedMember(null)}}><div className="modal" style={{width:"96vw",maxWidth:"1600px",height:"94vh",maxHeight:"94vh",boxSizing:"border-box",overflowY:"auto",padding:"28px 32px"}}><div className="modalHead"><div><p className="eyebrow">GESTÃO DA EQUIPE</p><h2>{selectedMember.full_name}</h2><p>{selectedMember.email||"E-mail não informado"}</p></div><button className="iconButton" onClick={()=>setSelectedMember(null)}><X/></button></div>
