@@ -69,6 +69,7 @@ export default function Home() {
   const [dataLoading,setDataLoading] = useState(false);
   const [dataError,setDataError] = useState("");
   const [active,setActive] = useState("Dashboard");
+  const [stockSection,setStockSection] = useState<"materiais"|"alertas"|"consumo">("materiais");
   const [search,setSearch] = useState("");
   const [requestUserFilter,setRequestUserFilter] = useState("Todos");
   const [scheduleOwnerFilter,setScheduleOwnerFilter] = useState("Todos");
@@ -1403,7 +1404,8 @@ export default function Home() {
           </div>
           {stockError && <div className="errorBanner"><span>{stockError}</span><button onClick={()=>setStockError("")}>Fechar</button></div>}
           {!canManageStock && <div className="notice" style={{marginBottom:16}}>Você possui acesso de consulta ao estoque. Para cadastrar materiais ou registrar movimentações, solicite ao administrador a permissão “Gerenciar Estoque”.</div>}
-          {canManageStock && <>
+          {canManageStock && <nav aria-label="Seções do estoque" style={{display:"flex",gap:8,flexWrap:"wrap",padding:6,marginBottom:18,border:"1px solid #e7e8ef",borderRadius:12,background:"#fff"}}>{[{id:"materiais",label:"Materiais",icon:<Package size={16}/>},{id:"alertas",label:"Alertas de estoque",icon:<AlertTriangle size={16}/>},{id:"consumo",label:"Análise de consumo",icon:<BarChart3 size={16}/>}].map(item=><button key={item.id} type="button" aria-pressed={stockSection===item.id} onClick={()=>setStockSection(item.id as "materiais"|"alertas"|"consumo")} style={{display:"inline-flex",alignItems:"center",justifyContent:"center",gap:8,padding:"10px 14px",border:stockSection===item.id?"1px solid #d8c2ef":"1px solid transparent",borderRadius:9,background:stockSection===item.id?"#f5edff":"transparent",color:stockSection===item.id?"#7020c5":"#686579",fontSize:13,fontWeight:stockSection===item.id?700:600,cursor:"pointer"}}>{item.icon}{item.label}</button>)}</nav>}
+          {canManageStock && stockSection==="materiais" && <>
             <div className="stats">
               <Stat icon={<Package/>} label="Materiais ativos" value={stockMaterials.length} tone="blue"/>
               <Stat icon={<AlertTriangle/>} label="Abaixo do mínimo" value={stockMaterials.filter(m=>Number(m.quantity)-(reservedByMaterial[m.id]||0)<=Number(m.minimum_quantity)).length} tone="red"/>
@@ -1420,6 +1422,8 @@ export default function Home() {
                 <Stat icon={<History/>} label="Ajustes" value={stockMovementSummary.adjustments} tone="blue"/>
               </div>
             </div>
+          </>}
+          {canManageStock && stockSection==="alertas" && <>
             <div className="panel" style={{marginTop:18}}>
               <div className="panelHead">
                 <div><h3>Alertas de estoque</h3><p>Materiais sem saldo disponível ou com saldo no limite/abaixo do estoque mínimo.</p></div>
@@ -1447,7 +1451,7 @@ export default function Home() {
               )}<Pagination {...paginationProps("stockAlerts",stockAlerts.length)}/>
             </div>
           </>}
-          {canManageStock && <section className="panel" style={{marginBottom:18,padding:22,border:"1px solid #e7e8ef",background:"linear-gradient(135deg,#fff 0%,#fcfbff 100%)"}}>
+          {canManageStock && stockSection==="consumo" && <section className="panel" style={{marginBottom:18,padding:22,border:"1px solid #e7e8ef",background:"linear-gradient(135deg,#fff 0%,#fcfbff 100%)"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:14,flexWrap:"wrap",marginBottom:18}}>
               <div style={{display:"flex",alignItems:"center",gap:11}}><span style={{width:38,height:38,display:"grid",placeItems:"center",borderRadius:12,background:"#f2eaff",color:"#7a1bd8"}}><BarChart3 size={19}/></span><div><h3 style={{margin:"0 0 4px",fontSize:15}}>Análise de consumo</h3><p style={{margin:0,fontSize:12,color:"#858397"}}>Acompanhe as saídas efetivas de materiais por período e identifique os itens de maior consumo.</p></div></div>
               <button className="secondary" onClick={exportStockConsumption} disabled={!filteredConsumptionMovements.length}><Download size={15}/> Exportar CSV</button>
@@ -1471,7 +1475,7 @@ export default function Home() {
               {!filteredConsumptionMovements.length?<div className="emptyTable">Nenhum consumo encontrado para os filtros selecionados.</div>:<div className="tableWrap"><table><thead><tr><th>Data</th><th>Material</th><th>Quantidade</th><th>Origem</th><th>Observações</th></tr></thead><tbody>{pageItems("stockConsumption",filteredConsumptionMovements).map(movement=>{const material=stockMaterials.find(item=>item.id===movement.material_id);const request=tasks.find(item=>item.id===movement.request_id);return <tr key={movement.id}><td>{new Date(movement.created_at).toLocaleString("pt-BR")}</td><td>{material?.name||"Material não encontrado"}</td><td><b>{Math.abs(Number(movement.quantity)||0).toLocaleString("pt-BR",{maximumFractionDigits:2})} {material?.unit||""}</b></td><td>{request?"Solicitação #"+request.protocol:movement.material_order_id?"Pedido de materiais":"Movimentação manual"}</td><td>{movement.notes||"—"}</td></tr>})}</tbody></table></div>}<Pagination {...paginationProps("stockConsumption",filteredConsumptionMovements.length)}/>
             </div><p style={{fontSize:11,color:"#858397",margin:"12px 0 0"}}>Critério: somente movimentações do tipo saída entram no cálculo. Reservas, cancelamentos de reserva e ajustes não são considerados consumo.</p>
           </section>}
-          <div className="panel">
+          {stockSection==="materiais" && <div className="panel">
             <div className="panelHead"><div><h3>Materiais cadastrados</h3><p>{canManageStock?"Estoque físico, reservas e saldo disponível.":"Consulta dos saldos físicos cadastrados."}</p></div><span className="muted">{filteredMaterials.length} material(is)</span></div>
             <div className="toolbar">
               <div className="search"><Search size={17}/><input placeholder="Buscar material ou código..." value={stockSearch} onChange={e=>setStockSearch(e.target.value)}/></div>
@@ -1494,8 +1498,8 @@ export default function Home() {
                   </tr>;
                 })}
               </tbody></table></div>}<Pagination {...paginationProps("materials",filteredMaterials.length)}/>
-          </div>
-          {canManageStock && <>
+          </div>}
+          {canManageStock && stockSection==="materiais" && <>
             <style>{`
               .stockReportFilters{padding:22px 24px;margin:18px 0;border:1px solid #e7e8ef;background:linear-gradient(135deg,#fff 0%,#fcfbff 100%);box-shadow:0 5px 18px rgba(31,24,55,.035)}
               .stockReportTop{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:20px}
