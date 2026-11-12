@@ -176,8 +176,21 @@ export default function Home() {
     setDataLoading(true); setDataError("");
     try {
       const profileResult = await supabase.from("profiles").select("id,full_name,email,role,area_id,active,stock_manager").eq("id",user.id).single();
+      if (
+        profileResult.error?.code === "PGRST116" ||
+        (!profileResult.error && !profileResult.data) ||
+        profileResult.data?.active === false
+      ) {
+        setProfile(null);
+        setAreas([]);
+        setTasks([]);
+        setMembers([]);
+        setDataError("");
+        setLoginError("Seu acesso ao sistema foi desativado. Entre em contato com o administrador.");
+        await supabase.auth.signOut();
+        return;
+      }
       if (profileResult.error) throw profileResult.error;
-      if (!profileResult.data.active) throw new Error("Seu usuário está inativo. Procure o administrador do sistema.");
       const p = profileResult.data as Profile;
       const [areaResult, requestResult, memberResult, profileAreasResult] = await Promise.all([
         supabase.from("areas").select("id,name").eq("active",true).order("name"),
