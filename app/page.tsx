@@ -825,7 +825,7 @@ export default function Home() {
   },[filteredConsumptionMovements,stockMaterials]);
   const stockConsumptionByMonth = useMemo(() => {
     const totals = new Map<string,number>();
-    filteredConsumptionMovements.forEach(movement=>{const month=movement.created_at.slice(0,7);totals.set(month,(totals.get(month)||0)+Math.abs(Number(movement.quantity)||0);});
+    filteredConsumptionMovements.forEach(movement=>{const month=movement.created_at.slice(0,7);totals.set(month,(totals.get(month)||0)+Math.abs(Number(movement.quantity)||0));});
     return [...totals.entries()].sort((a,b)=>a[0].localeCompare(b[0])).slice(-6).map(([month,quantity])=>({month,label:new Date(month+"-01T12:00:00").toLocaleDateString("pt-BR",{month:"short",year:"2-digit"}),quantity}));
   },[filteredConsumptionMovements]);
   const stockAlerts = useMemo(() => stockMaterials
