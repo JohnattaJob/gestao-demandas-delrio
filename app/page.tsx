@@ -69,6 +69,7 @@ export default function Home() {
   const [dataLoading,setDataLoading] = useState(false);
   const [dataError,setDataError] = useState("");
   const [active,setActive] = useState("Dashboard");
+  const [stockSection,setStockSection] = useState<"materiais"|"alertas"|"consumo">("materiais");
   const [search,setSearch] = useState("");
   const [requestUserFilter,setRequestUserFilter] = useState("Todos");
   const [scheduleOwnerFilter,setScheduleOwnerFilter] = useState("Todos");
@@ -133,6 +134,9 @@ export default function Home() {
   const [stockReportType,setStockReportType] = useState("Todos");
   const [stockReportStart,setStockReportStart] = useState("");
   const [stockReportEnd,setStockReportEnd] = useState("");
+  const [stockConsumptionMaterial,setStockConsumptionMaterial] = useState("Todos");
+  const [stockConsumptionStart,setStockConsumptionStart] = useState("");
+  const [stockConsumptionEnd,setStockConsumptionEnd] = useState("");
   const [materialForm,setMaterialForm] = useState({name:"",sku:"",description:"",unit:"un",minimum_quantity:"0"});
   const [movementForm,setMovementForm] = useState({material_id:"",movement_type:"entrada" as StockMovement["movement_type"],quantity:"",request_id:"",notes:""});
   const [materialOrders,setMaterialOrders] = useState<MaterialOrder[]>([]);
@@ -802,6 +806,29 @@ export default function Home() {
       reservations: count("reserva") + count("cancelamento_reserva")
     };
   },[filteredStockMovements]);
+  const filteredConsumptionMovements = useMemo(() => stockMovements.filter(movement => {
+    if (movement.movement_type !== "saida") return false;
+    if (stockConsumptionMaterial !== "Todos" && movement.material_id !== stockConsumptionMaterial) return false;
+    const movementDate = movement.created_at.slice(0,10);
+    if (stockConsumptionStart && movementDate < stockConsumptionStart) return false;
+    if (stockConsumptionEnd && movementDate > stockConsumptionEnd) return false;
+    return true;
+  }),[stockMovements,stockConsumptionMaterial,stockConsumptionStart,stockConsumptionEnd]);
+  const stockConsumptionSummary = useMemo(() => ({
+    movements: filteredConsumptionMovements.length,
+    materials: new Set(filteredConsumptionMovements.map(movement=>movement.material_id)).size,
+    units: new Set(filteredConsumptionMovements.map(movement=>stockMaterials.find(item=>item.id===movement.material_id)?.unit).filter(Boolean)).size
+  }),[filteredConsumptionMovements,stockMaterials]);
+  const stockConsumptionByMaterial = useMemo(() => {
+    const totals = new Map<string,number>();
+    filteredConsumptionMovements.forEach(movement=>totals.set(movement.material_id,(totals.get(movement.material_id)||0)+Math.abs(Number(movement.quantity)||0)));
+    return [...totals.entries()].map(([materialId,quantity])=>({material:stockMaterials.find(item=>item.id===materialId),materialId,quantity})).sort((a,b)=>b.quantity-a.quantity);
+  },[filteredConsumptionMovements,stockMaterials]);
+  const stockConsumptionByMonth = useMemo(() => {
+    const totals = new Map<string,number>();
+    filteredConsumptionMovements.forEach(movement=>{const month=movement.created_at.slice(0,7);totals.set(month,(totals.get(month)||0)+1);});
+    return [...totals.entries()].sort((a,b)=>a[0].localeCompare(b[0])).slice(-6).map(([month,quantity])=>({month,label:new Date(month+"-01T12:00:00").toLocaleDateString("pt-BR",{month:"short",year:"2-digit"}),quantity}));
+  },[filteredConsumptionMovements]);
   const stockAlerts = useMemo(() => stockMaterials
     .map(material => {
       const reserved = reservedByMaterial[material.id] || 0;
@@ -1030,6 +1057,25 @@ export default function Home() {
       }
     }
     setStockSaving(false);
+  }
+
+  function exportStockConsumption() {
+    const csvCell = (value:unknown) => '"' + String(value ?? "").replace(/"/g,'""') + '"';
+    const formatDate = (value:string) => value ? new Date(value).toLocaleString("pt-BR") : "—";
+    const rows:unknown[][] = [
+      ["ANÁLISE DE CONSUMO DE MATERIAIS"],
+      ["Critério","Somente movimentações do tipo saída; reservas, cancelamentos e ajustes não são contabilizados"],
+      ["Material",stockConsumptionMaterial==="Todos"?"Todos os materiais":stockMaterials.find(item=>item.id===stockConsumptionMaterial)?.name||"Material selecionado"],
+      ["Data inicial",stockConsumptionStart||"Todo o período"],
+      ["Data final",stockConsumptionEnd||"Todo o período"],
+      [],["INDICADORES"],["Saídas registradas",String(stockConsumptionSummary.movements)],["Materiais consumidos",String(stockConsumptionSummary.materials)],["Unidades de medida distintas",String(stockConsumptionSummary.units)],
+      [],["CONSUMO POR MATERIAL"],["Material","Código","Quantidade consumida","Unidade"],
+      ...stockConsumptionByMaterial.map(item=>[item.material?.name||"Material não encontrado",item.material?.sku||"",String(item.quantity),item.material?.unit||""]),
+      [],["DETALHAMENTO"],["Data","Material","Código","Quantidade","Unidade","Origem","Observações"],
+      ...filteredConsumptionMovements.map(movement=>{const material=stockMaterials.find(item=>item.id===movement.material_id);const request=tasks.find(item=>item.id===movement.request_id);return [formatDate(movement.created_at),material?.name||"Material não encontrado",material?.sku||"",String(Math.abs(Number(movement.quantity)||0)),material?.unit||"",request?"Solicitação #"+request.protocol:movement.material_order_id?"Pedido de materiais":"Movimentação manual",movement.notes||""];})
+    ];
+    const csv="\uFEFF"+rows.map(row=>row.map(csvCell).join(";")).join("\r\n");
+    const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"});const url=URL.createObjectURL(blob);const link=document.createElement("a");link.href=url;link.download="analise-consumo-estoque.csv";document.body.appendChild(link);link.click();document.body.removeChild(link);URL.revokeObjectURL(url);
   }
 
   function exportStockMovements() {
@@ -1352,13 +1398,14 @@ export default function Home() {
             <div><p className="eyebrow">MATERIAIS</p><h1>Estoque</h1><p className="sub">Controle de materiais promocionais, disponibilidade e movimentações.</p></div>
             {canManageStock && <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
               <button className="secondary" onClick={()=>loadStock()} disabled={stockLoading}><RefreshCw size={15}/> Atualizar</button>
-              <button className="secondary" onClick={openNewMaterial}><Plus size={16}/> Novo material</button>
-              <button className="primary" onClick={()=>{setMovementForm(old=>({...old,material_id:old.material_id||stockMaterials[0]?.id||""}));setShowStockMovement(true)}} disabled={!stockMaterials.length}><ArrowUpRight size={16}/> Nova movimentação</button>
+              {stockSection==="materiais" && <><button className="secondary" onClick={openNewMaterial}><Plus size={16}/> Novo material</button>
+              <button className="primary" onClick={()=>{setMovementForm(old=>({...old,material_id:old.material_id||stockMaterials[0]?.id||""}));setShowStockMovement(true)}} disabled={!stockMaterials.length}><ArrowUpRight size={16}/> Nova movimentação</button></>}
             </div>}
           </div>
           {stockError && <div className="errorBanner"><span>{stockError}</span><button onClick={()=>setStockError("")}>Fechar</button></div>}
           {!canManageStock && <div className="notice" style={{marginBottom:16}}>Você possui acesso de consulta ao estoque. Para cadastrar materiais ou registrar movimentações, solicite ao administrador a permissão “Gerenciar Estoque”.</div>}
-          {canManageStock && <>
+          {canManageStock && <nav aria-label="Seções do estoque" style={{display:"flex",gap:8,flexWrap:"wrap",padding:6,marginBottom:18,border:"1px solid #e7e8ef",borderRadius:12,background:"#fff"}}>{[{id:"materiais",label:"Materiais",icon:<Package size={16}/>},{id:"alertas",label:"Alertas de estoque",icon:<AlertTriangle size={16}/>},{id:"consumo",label:"Análise de consumo",icon:<BarChart3 size={16}/>}].map(item=><button key={item.id} type="button" aria-pressed={stockSection===item.id} onClick={()=>setStockSection(item.id as "materiais"|"alertas"|"consumo")} style={{display:"inline-flex",alignItems:"center",justifyContent:"center",gap:8,padding:"10px 14px",border:stockSection===item.id?"1px solid #d8c2ef":"1px solid transparent",borderRadius:9,background:stockSection===item.id?"#f5edff":"transparent",color:stockSection===item.id?"#7020c5":"#686579",fontSize:13,fontWeight:stockSection===item.id?700:600,cursor:"pointer"}}>{item.icon}{item.label}</button>)}</nav>}
+          {canManageStock && stockSection==="materiais" && <>
             <div className="stats">
               <Stat icon={<Package/>} label="Materiais ativos" value={stockMaterials.length} tone="blue"/>
               <Stat icon={<AlertTriangle/>} label="Abaixo do mínimo" value={stockMaterials.filter(m=>Number(m.quantity)-(reservedByMaterial[m.id]||0)<=Number(m.minimum_quantity)).length} tone="red"/>
@@ -1375,6 +1422,8 @@ export default function Home() {
                 <Stat icon={<History/>} label="Ajustes" value={stockMovementSummary.adjustments} tone="blue"/>
               </div>
             </div>
+          </>}
+          {canManageStock && stockSection==="alertas" && <>
             <div className="panel" style={{marginTop:18}}>
               <div className="panelHead">
                 <div><h3>Alertas de estoque</h3><p>Materiais sem saldo disponível ou com saldo no limite/abaixo do estoque mínimo.</p></div>
@@ -1402,7 +1451,41 @@ export default function Home() {
               )}<Pagination {...paginationProps("stockAlerts",stockAlerts.length)}/>
             </div>
           </>}
-          <div className="panel">
+          {canManageStock && stockSection==="consumo" && <>
+            <style>{`
+              .stockReportGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(185px,1fr));gap:14px;align-items:start}
+              .stockReportFieldLabel{display:block;margin:0 0 9px;color:#565568;font-size:11px;font-weight:700;letter-spacing:.035em;text-transform:uppercase}
+              .stockReportControl{width:100%;height:43px;box-sizing:border-box;border:1px solid #e1e2ea;border-radius:10px;background:#fff;padding:0 12px;color:#292837;font-size:13px;font-weight:500;font-family:inherit;outline:none;transition:border-color .15s,box-shadow .15s}
+              .stockReportControl:focus{border-color:#9b5cdb;box-shadow:0 0 0 3px rgba(122,27,216,.10)}
+              @media(max-width:700px){.stockReportGrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+              @media(max-width:520px){.stockReportGrid{grid-template-columns:1fr}}
+            `}</style>
+            <section className="panel" style={{marginBottom:18,padding:22,border:"1px solid #e7e8ef",background:"linear-gradient(135deg,#fff 0%,#fcfbff 100%)"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:14,flexWrap:"wrap",marginBottom:18}}>
+              <div style={{display:"flex",alignItems:"center",gap:11}}><span style={{width:38,height:38,display:"grid",placeItems:"center",borderRadius:12,background:"#f2eaff",color:"#7a1bd8"}}><BarChart3 size={19}/></span><div><h3 style={{margin:"0 0 4px",fontSize:15}}>Análise de consumo</h3><p style={{margin:0,fontSize:12,color:"#858397"}}>Acompanhe as saídas efetivas de materiais por período e identifique os itens de maior consumo.</p></div></div>
+              <button className="secondary" onClick={exportStockConsumption} disabled={!filteredConsumptionMovements.length}><Download size={15}/> Exportar CSV</button>
+            </div>
+            <div className="stockReportGrid" style={{marginBottom:18}}>
+              <div><label className="stockReportFieldLabel" htmlFor="consumption-material">Material</label><select id="consumption-material" className="stockReportControl" value={stockConsumptionMaterial} onChange={e=>setStockConsumptionMaterial(e.target.value)}><option value="Todos">Todos os materiais</option>{stockMaterials.map(material=><option key={material.id} value={material.id}>{material.name}</option>)}</select></div>
+              <div><label className="stockReportFieldLabel" htmlFor="consumption-start">Data inicial</label><input id="consumption-start" className="stockReportControl" type="date" value={stockConsumptionStart} max={stockConsumptionEnd||undefined} onChange={e=>setStockConsumptionStart(e.target.value)}/></div>
+              <div><label className="stockReportFieldLabel" htmlFor="consumption-end">Data final</label><input id="consumption-end" className="stockReportControl" type="date" value={stockConsumptionEnd} min={stockConsumptionStart||undefined} onChange={e=>setStockConsumptionEnd(e.target.value)}/></div>
+              <div style={{display:"flex",alignItems:"end"}}><button className="secondary" style={{width:"100%",height:43}} onClick={()=>{setStockConsumptionMaterial("Todos");setStockConsumptionStart("");setStockConsumptionEnd("")}}>Limpar filtros</button></div>
+            </div>
+            <div className="stats" style={{marginBottom:18}}><Stat icon={<History/>} label="Saídas registradas" value={stockConsumptionSummary.movements} tone="blue"/><Stat icon={<Package/>} label="Materiais consumidos" value={stockConsumptionSummary.materials} tone="violet"/><Stat icon={<Layers/>} label="Unidades de medida distintas" value={stockConsumptionSummary.units} tone="green"/></div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:16}}>
+              <div style={{border:"1px solid #eeeaf3",borderRadius:12,padding:16,minWidth:0}}><h4 style={{fontSize:13,margin:"0 0 5px"}}>Evolução mensal</h4><p style={{fontSize:11,color:"#858397",margin:"0 0 18px"}}>Número de saídas registradas nos últimos seis meses disponíveis no filtro.</p>
+                {!stockConsumptionByMonth.length?<div className="emptyTable">Sem saídas no período selecionado.</div>:<div style={{display:"grid",gap:13}}>{stockConsumptionByMonth.map(item=>{const max=Math.max(...stockConsumptionByMonth.map(entry=>entry.quantity),1);return <div key={item.month}><div style={{display:"flex",justifyContent:"space-between",gap:10,fontSize:12,marginBottom:6}}><span style={{color:"#565568",textTransform:"capitalize"}}>{item.label}</span><b>{item.quantity.toLocaleString("pt-BR",{maximumFractionDigits:0})}</b></div><div style={{height:9,background:"#f0edf5",borderRadius:99,overflow:"hidden"}}><div style={{height:"100%",width:`${Math.max(2,item.quantity/max*100)}%`,background:"linear-gradient(90deg,#9b5cdb,#7624c7)",borderRadius:99}}/></div></div>})}</div>}
+              </div>
+              <div style={{border:"1px solid #eeeaf3",borderRadius:12,padding:16,minWidth:0}}><h4 style={{fontSize:13,margin:"0 0 5px"}}>Materiais mais consumidos</h4><p style={{fontSize:11,color:"#858397",margin:"0 0 18px"}}>Ranking por quantidade total de saídas no período.</p>
+                {!stockConsumptionByMaterial.length?<div className="emptyTable">Sem consumo registrado no período.</div>:<div style={{display:"grid",gap:13}}>{stockConsumptionByMaterial.slice(0,5).map((item,index)=>{const max=Math.max(...stockConsumptionByMaterial.map(entry=>entry.quantity),1);return <div key={item.materialId}><div style={{display:"flex",justifyContent:"space-between",gap:10,fontSize:12,marginBottom:6}}><span style={{color:"#565568",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{index+1}. {item.material?.name||"Material não encontrado"}</span><b style={{whiteSpace:"nowrap"}}>{item.quantity.toLocaleString("pt-BR",{maximumFractionDigits:2})} {item.material?.unit||""}</b></div><div style={{height:9,background:"#f0edf5",borderRadius:99,overflow:"hidden"}}><div style={{height:"100%",width:`${Math.max(2,item.quantity/max*100)}%`,background:"#7a1bd8",borderRadius:99}}/></div></div>})}</div>}
+              </div>
+            </div>
+            <div style={{marginTop:18,border:"1px solid #eeeaf3",borderRadius:12,overflow:"hidden"}}><div style={{padding:"14px 16px",display:"flex",justifyContent:"space-between",gap:10,flexWrap:"wrap",borderBottom:"1px solid #eeeaf3"}}><div><h4 style={{fontSize:13,margin:"0 0 4px"}}>Detalhamento do consumo</h4><p style={{fontSize:11,color:"#858397",margin:0}}>Cada linha representa uma movimentação efetiva do tipo saída.</p></div><span className="muted">{filteredConsumptionMovements.length} registro(s)</span></div>
+              {!filteredConsumptionMovements.length?<div className="emptyTable">Nenhum consumo encontrado para os filtros selecionados.</div>:<div className="tableWrap"><table><thead><tr><th>Data</th><th>Material</th><th>Quantidade</th><th>Origem</th><th>Observações</th></tr></thead><tbody>{pageItems("stockConsumption",filteredConsumptionMovements).map(movement=>{const material=stockMaterials.find(item=>item.id===movement.material_id);const request=tasks.find(item=>item.id===movement.request_id);return <tr key={movement.id}><td>{new Date(movement.created_at).toLocaleString("pt-BR")}</td><td>{material?.name||"Material não encontrado"}</td><td><b>{Math.abs(Number(movement.quantity)||0).toLocaleString("pt-BR",{maximumFractionDigits:2})} {material?.unit||""}</b></td><td>{request?"Solicitação #"+request.protocol:movement.material_order_id?"Pedido de materiais":"Movimentação manual"}</td><td>{movement.notes||"—"}</td></tr>})}</tbody></table></div>}<Pagination {...paginationProps("stockConsumption",filteredConsumptionMovements.length)}/>
+            </div><p style={{fontSize:11,color:"#858397",margin:"12px 0 0"}}>Critério: somente movimentações do tipo saída entram no cálculo. Reservas, cancelamentos de reserva e ajustes não são considerados consumo.</p>
+          </section>
+          </>}
+          {stockSection==="materiais" && <div className="panel">
             <div className="panelHead"><div><h3>Materiais cadastrados</h3><p>{canManageStock?"Estoque físico, reservas e saldo disponível.":"Consulta dos saldos físicos cadastrados."}</p></div><span className="muted">{filteredMaterials.length} material(is)</span></div>
             <div className="toolbar">
               <div className="search"><Search size={17}/><input placeholder="Buscar material ou código..." value={stockSearch} onChange={e=>setStockSearch(e.target.value)}/></div>
@@ -1425,8 +1508,8 @@ export default function Home() {
                   </tr>;
                 })}
               </tbody></table></div>}<Pagination {...paginationProps("materials",filteredMaterials.length)}/>
-          </div>
-          {canManageStock && <>
+          </div>}
+          {canManageStock && stockSection==="materiais" && <>
             <style>{`
               .stockReportFilters{padding:22px 24px;margin:18px 0;border:1px solid #e7e8ef;background:linear-gradient(135deg,#fff 0%,#fcfbff 100%);box-shadow:0 5px 18px rgba(31,24,55,.035)}
               .stockReportTop{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:20px}
