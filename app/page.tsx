@@ -814,10 +814,10 @@ export default function Home() {
     return true;
   }),[stockMovements,stockConsumptionMaterial,stockConsumptionStart,stockConsumptionEnd]);
   const stockConsumptionSummary = useMemo(() => ({
-    totalQuantity: filteredConsumptionMovements.reduce((total,movement)=>total+Math.abs(Number(movement.quantity)||0),0),
     movements: filteredConsumptionMovements.length,
-    materials: new Set(filteredConsumptionMovements.map(movement=>movement.material_id)).size
-  }),[filteredConsumptionMovements]);
+    materials: new Set(filteredConsumptionMovements.map(movement=>movement.material_id)).size,
+    units: new Set(filteredConsumptionMovements.map(movement=>stockMaterials.find(item=>item.id===movement.material_id)?.unit).filter(Boolean)).size
+  }),[filteredConsumptionMovements,stockMaterials]);
   const stockConsumptionByMaterial = useMemo(() => {
     const totals = new Map<string,number>();
     filteredConsumptionMovements.forEach(movement=>totals.set(movement.material_id,(totals.get(movement.material_id)||0)+Math.abs(Number(movement.quantity)||0)));
@@ -825,7 +825,7 @@ export default function Home() {
   },[filteredConsumptionMovements,stockMaterials]);
   const stockConsumptionByMonth = useMemo(() => {
     const totals = new Map<string,number>();
-    filteredConsumptionMovements.forEach(movement=>{const month=movement.created_at.slice(0,7);totals.set(month,(totals.get(month)||0)+Math.abs(Number(movement.quantity)||0));});
+    filteredConsumptionMovements.forEach(movement=>{const month=movement.created_at.slice(0,7);totals.set(month,(totals.get(month)||0)+1);});
     return [...totals.entries()].sort((a,b)=>a[0].localeCompare(b[0])).slice(-6).map(([month,quantity])=>({month,label:new Date(month+"-01T12:00:00").toLocaleDateString("pt-BR",{month:"short",year:"2-digit"}),quantity}));
   },[filteredConsumptionMovements]);
   const stockAlerts = useMemo(() => stockMaterials
@@ -1067,7 +1067,7 @@ export default function Home() {
       ["Material",stockConsumptionMaterial==="Todos"?"Todos os materiais":stockMaterials.find(item=>item.id===stockConsumptionMaterial)?.name||"Material selecionado"],
       ["Data inicial",stockConsumptionStart||"Todo o período"],
       ["Data final",stockConsumptionEnd||"Todo o período"],
-      [],["INDICADORES"],["Quantidade consumida",String(stockConsumptionSummary.totalQuantity)],["Movimentações consideradas",String(stockConsumptionSummary.movements)],["Materiais consumidos",String(stockConsumptionSummary.materials)],
+      [],["INDICADORES"],["Saídas registradas",String(stockConsumptionSummary.movements)],["Materiais consumidos",String(stockConsumptionSummary.materials)],["Unidades de medida distintas",String(stockConsumptionSummary.units)],
       [],["CONSUMO POR MATERIAL"],["Material","Código","Quantidade consumida","Unidade"],
       ...stockConsumptionByMaterial.map(item=>[item.material?.name||"Material não encontrado",item.material?.sku||"",String(item.quantity),item.material?.unit||""]),
       [],["DETALHAMENTO"],["Data","Material","Código","Quantidade","Unidade","Origem","Observações"],
@@ -1458,10 +1458,10 @@ export default function Home() {
               <div><label className="stockReportFieldLabel" htmlFor="consumption-end">Data final</label><input id="consumption-end" className="stockReportControl" type="date" value={stockConsumptionEnd} min={stockConsumptionStart||undefined} onChange={e=>setStockConsumptionEnd(e.target.value)}/></div>
               <div style={{display:"flex",alignItems:"end"}}><button className="secondary" style={{width:"100%",height:43}} onClick={()=>{setStockConsumptionMaterial("Todos");setStockConsumptionStart("");setStockConsumptionEnd("")}}>Limpar filtros</button></div>
             </div>
-            <div className="stats" style={{marginBottom:18}}><Stat icon={<Activity/>} label="Quantidade consumida" value={stockConsumptionSummary.totalQuantity.toLocaleString("pt-BR",{maximumFractionDigits:2})} tone="blue"/><Stat icon={<History/>} label="Saídas registradas" value={stockConsumptionSummary.movements} tone="violet"/><Stat icon={<Package/>} label="Materiais consumidos" value={stockConsumptionSummary.materials} tone="green"/></div>
+            <div className="stats" style={{marginBottom:18}}><Stat icon={<History/>} label="Saídas registradas" value={stockConsumptionSummary.movements} tone="blue"/><Stat icon={<Package/>} label="Materiais consumidos" value={stockConsumptionSummary.materials} tone="violet"/><Stat icon={<Layers/>} label="Unidades de medida distintas" value={stockConsumptionSummary.units} tone="green"/></div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:16}}>
-              <div style={{border:"1px solid #eeeaf3",borderRadius:12,padding:16,minWidth:0}}><h4 style={{fontSize:13,margin:"0 0 5px"}}>Evolução mensal</h4><p style={{fontSize:11,color:"#858397",margin:"0 0 18px"}}>Quantidade consumida nos últimos seis meses disponíveis no filtro.</p>
-                {!stockConsumptionByMonth.length?<div className="emptyTable">Sem saídas no período selecionado.</div>:<div style={{display:"grid",gap:13}}>{stockConsumptionByMonth.map(item=>{const max=Math.max(...stockConsumptionByMonth.map(entry=>entry.quantity),1);return <div key={item.month}><div style={{display:"flex",justifyContent:"space-between",gap:10,fontSize:12,marginBottom:6}}><span style={{color:"#565568",textTransform:"capitalize"}}>{item.label}</span><b>{item.quantity.toLocaleString("pt-BR",{maximumFractionDigits:2})}</b></div><div style={{height:9,background:"#f0edf5",borderRadius:99,overflow:"hidden"}}><div style={{height:"100%",width:`${Math.max(2,item.quantity/max*100)}%`,background:"linear-gradient(90deg,#9b5cdb,#7624c7)",borderRadius:99}}/></div></div>})}</div>}
+              <div style={{border:"1px solid #eeeaf3",borderRadius:12,padding:16,minWidth:0}}><h4 style={{fontSize:13,margin:"0 0 5px"}}>Evolução mensal</h4><p style={{fontSize:11,color:"#858397",margin:"0 0 18px"}}>Número de saídas registradas nos últimos seis meses disponíveis no filtro.</p>
+                {!stockConsumptionByMonth.length?<div className="emptyTable">Sem saídas no período selecionado.</div>:<div style={{display:"grid",gap:13}}>{stockConsumptionByMonth.map(item=>{const max=Math.max(...stockConsumptionByMonth.map(entry=>entry.quantity),1);return <div key={item.month}><div style={{display:"flex",justifyContent:"space-between",gap:10,fontSize:12,marginBottom:6}}><span style={{color:"#565568",textTransform:"capitalize"}}>{item.label}</span><b>{item.quantity.toLocaleString("pt-BR",{maximumFractionDigits:0})}</b></div><div style={{height:9,background:"#f0edf5",borderRadius:99,overflow:"hidden"}}><div style={{height:"100%",width:`${Math.max(2,item.quantity/max*100)}%`,background:"linear-gradient(90deg,#9b5cdb,#7624c7)",borderRadius:99}}/></div></div>})}</div>}
               </div>
               <div style={{border:"1px solid #eeeaf3",borderRadius:12,padding:16,minWidth:0}}><h4 style={{fontSize:13,margin:"0 0 5px"}}>Materiais mais consumidos</h4><p style={{fontSize:11,color:"#858397",margin:"0 0 18px"}}>Ranking por quantidade total de saídas no período.</p>
                 {!stockConsumptionByMaterial.length?<div className="emptyTable">Sem consumo registrado no período.</div>:<div style={{display:"grid",gap:13}}>{stockConsumptionByMaterial.slice(0,5).map((item,index)=>{const max=Math.max(...stockConsumptionByMaterial.map(entry=>entry.quantity),1);return <div key={item.materialId}><div style={{display:"flex",justifyContent:"space-between",gap:10,fontSize:12,marginBottom:6}}><span style={{color:"#565568",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{index+1}. {item.material?.name||"Material não encontrado"}</span><b style={{whiteSpace:"nowrap"}}>{item.quantity.toLocaleString("pt-BR",{maximumFractionDigits:2})} {item.material?.unit||""}</b></div><div style={{height:9,background:"#f0edf5",borderRadius:99,overflow:"hidden"}}><div style={{height:"100%",width:`${Math.max(2,item.quantity/max*100)}%`,background:"#7a1bd8",borderRadius:99}}/></div></div>})}</div>}
