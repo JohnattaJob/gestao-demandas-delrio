@@ -157,6 +157,12 @@ export default function Home() {
   const [auditStartDate,setAuditStartDate] = useState("");
   const [auditEndDate,setAuditEndDate] = useState("");
   const [selectedAuditLog,setSelectedAuditLog] = useState<AuditLog|null>(null);
+  const [listPagination,setListPagination] = useState<Record<string,{page:number;pageSize:number}>>({});
+  const getPagination = (key:string,total:number) => { const current=listPagination[key]||{page:1,pageSize:10}; const totalPages=Math.max(1,Math.ceil(total/current.pageSize)); const page=Math.min(current.page,totalPages); return {page,pageSize:current.pageSize,total,totalPages}; };
+  const pageItems = <T,>(key:string,items:T[]) => { const {page,pageSize}=getPagination(key,items.length); return items.slice((page-1)*pageSize,page*pageSize); };
+  const setListPage = (key:string,page:number) => setListPagination(old=>({...old,[key]:{...(old[key]||{page:1,pageSize:10}),page}}));
+  const setListPageSize = (key:string,pageSize:number) => setListPagination(old=>({...old,[key]:{page:1,pageSize}}));
+  const paginationProps = (key:string,total:number) => ({...getPagination(key,total),onPageChange:(page:number)=>setListPage(key,page),onPageSizeChange:(size:number)=>setListPageSize(key,size)});
 
   useEffect(() => {
     if (!supabase) { setAuthLoading(false); setLoginError("As variáveis do Supabase não foram encontradas. Confira o arquivo .env.local e reinicie o servidor."); return; }
@@ -506,6 +512,7 @@ export default function Home() {
   useEffect(() => { if (active === "Pedidos de Materiais" && profile) loadMaterialOrders(); },[active,profile,loadMaterialOrders]);
   useEffect(() => { if (active === "Auditoria" && profile?.role === "admin") void loadAuditLogs(); },[active,profile?.role,loadAuditLogs]);
   useEffect(() => { setDeleteConfirm(false); setCompleteConfirm(false); }, [selected?.id]);
+  useEffect(() => { setListPagination(old=>Object.fromEntries(Object.entries(old).map(([key,value])=>[key,{...value,page:1}]))); },[search,requestUserFilter,scheduleOwnerFilter,scheduleAreaFilter,scheduleStatusFilter,schedulePeriod,scheduleStartDate,scheduleEndDate,stockSearch,stockReportMaterial,stockReportType,stockReportStart,stockReportEnd,reportDateMode,reportPeriod,reportStartDate,reportEndDate,reportAreaFilter,reportOwnerFilter,reportStatusFilter,auditSearch,auditActorFilter,auditModuleFilter,auditActionFilter,auditStartDate,auditEndDate,memberTaskStatus]);
   useEffect(() => { if (areas.length && !form.areaId) setForm(old=>({...old,areaId:areas[0].id})); },[areas,form.areaId]);
 
   useEffect(() => {
@@ -1146,6 +1153,7 @@ export default function Home() {
       {nav.map(([name,Icon])=><button key={name} className={`navItem ${active===name?"active":""}`} onClick={()=>{setActive(name);setMobileMenu(false);setSelected(null)}}><Icon size={18}/>{name}{name==="Solicitações"&&<span className="navCount">{tasks.length}</span>}</button>)}
       <div className="sidebarBottom"><div className="userAvatar">{(profile?.full_name||"U").split(" ").map(x=>x[0]).slice(0,2).join("").toUpperCase()}</div><div><b>{profile?.full_name||"Usuário"}</b><small>{profile?.role==="admin"?"Administrador":profile?.role==="gestor"?"Gestor":"Colaborador"}</small></div><button className="logoutIcon" title="Sair" onClick={signOut}><LogOut size={16}/></button></div>
     </aside>
+    <style>{`.listPagination{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:14px 16px;border-top:1px solid #f0edf4}.paginationSummary{font-size:12px;color:#777487}.paginationSummary b{color:#4b3a60}.paginationControls{display:flex;align-items:center;gap:5px;flex-wrap:wrap}.paginationSize{display:flex;align-items:center;gap:7px;margin-right:7px;color:#777487;font-size:11px;font-weight:600}.paginationSize select{height:32px;padding:0 8px;border:1px solid #e1e2ea;border-radius:8px;background:#fff;color:#454253;font:500 12px inherit}.paginationButton{min-width:32px;height:32px;padding:0 9px;border:1px solid #e5e2eb;border-radius:8px;background:#fff;color:#686579;font:600 11px inherit;cursor:pointer}.paginationButton:hover:not(:disabled){border-color:#c7a5e8;color:#7022bd}.paginationButton.active{border-color:#7a1bd8;background:#f5edff;color:#7020c5}.paginationButton:disabled{opacity:.4;cursor:not-allowed}.paginationDots{padding:0 3px;color:#858397}@media(max-width:620px){.listPagination{align-items:flex-start}.paginationControls{width:100%}.paginationSize{margin-right:auto}}`}</style>
     <section className="main">
       <header className="topbar"><button className="menuButton" onClick={()=>setMobileMenu(true)}><Menu/></button><div className="crumb">Marketing <span>/</span> {active}</div><div className="topRight"><div className="notificationWrap"><button className="notificationBell" type="button" aria-label="Abrir notificações" title="Notificações" onClick={()=>setShowNotifications(old=>!old)}><Bell size={19}/>{unreadNotificationCount>0&&<span className="notificationBadge">{unreadNotificationCount>99?"99+":unreadNotificationCount}</span>}</button>{showNotifications&&<div className="notificationPanel"><div className="notificationPanelHead"><div><b>Notificações</b><small>{unreadNotificationCount} não lida(s)</small></div><div className="notificationPanelActions"><button className="textButton" type="button" onClick={markAllNotificationsRead} disabled={!unreadNotificationCount}>Marcar todas como lidas</button><button className="iconButton" type="button" aria-label="Fechar notificações" onClick={()=>setShowNotifications(false)}><X size={14}/></button></div></div>{notificationsError&&<div className="notificationError">{notificationsError}</div>}{notificationsLoading&&!notifications.length?<div className="notificationEmpty">Carregando notificações...</div>:!notifications.length?<div className="notificationEmpty">Você ainda não tem notificações.</div>:<div className="notificationList">{notifications.map(item=><button type="button" key={item.id} className={`notificationItem ${item.is_read?"read":"unread"}`} onClick={()=>void openNotification(item)}><span className="notificationItemDot"/><span className="notificationItemContent"><b>{item.title}</b><span>{item.message}</span><small>{new Date(item.created_at).toLocaleString("pt-BR",{dateStyle:"short",timeStyle:"short"})}</small></span></button>)}</div>}</div>}</div><span className="online"><i/> {dataLoading?"Sincronizando":"Conectado ao Supabase"}</span><div className="userAvatar">{(profile?.full_name||"U").split(" ").map(x=>x[0]).slice(0,2).join("").toUpperCase()}</div></div></header>
       <div className="content">
@@ -1199,8 +1207,8 @@ export default function Home() {
           <div className="panel" style={{marginBottom:18}}>
             <div className="panelHead"><div><h3>Solicitações por colaborador</h3><p>Distribuição das demandas por responsável pela execução</p></div><span className="muted">{requestsByOwner.length} colaborador(es)</span></div>
             {!requestsByOwner.length ? <div className="emptyTable">Ainda não há solicitações atribuídas a colaboradores.</div> : <div className="tableWrap"><table><thead><tr><th>Colaborador responsável</th><th>Total atribuídas</th><th>Em andamento</th><th>Concluídas</th><th>Atrasadas</th><th>Canceladas</th></tr></thead><tbody>
-              {requestsByOwner.map(person=><tr key={person.id}><td><b>{person.name}</b></td><td><b>{person.total}</b></td><td>{person.inProgress}</td><td>{person.done}</td><td>{person.late}</td><td>{person.cancelled}</td></tr>)}
-            </tbody></table></div>}
+              {pageItems("dashboardOwners",requestsByOwner).map(person=><tr key={person.id}><td><b>{person.name}</b></td><td><b>{person.total}</b></td><td>{person.inProgress}</td><td>{person.done}</td><td>{person.late}</td><td>{person.cancelled}</td></tr>)}
+            </tbody></table></div>}{requestsByOwner.length>0&&<Pagination {...paginationProps("dashboardOwners",requestsByOwner.length)}/>}
           </div>
           <div className="panel"><div className="panelHead"><div><h3>Próximos prazos</h3><p>Demandas que exigem acompanhamento</p></div><button className="textButton" onClick={()=>setActive("Cronograma")}>Abrir cronograma <ArrowUpRight size={15}/></button></div><TaskTable tasks={[...dashboardTasks].filter(t=>t.status!=="Concluída"&&t.status!=="Cancelada").sort((a,b)=>a.due.localeCompare(b.due)).slice(0,4)} onSelect={setSelected} unreadCounts={unreadCounts}/></div>
         </>}
@@ -1227,7 +1235,7 @@ export default function Home() {
           <section className="panel requestFilterCard">
             <div className="requestFilterTop">
               <div className="requestFilterTitle"><span className="requestFilterIcon"><Search size={19}/></span><div><h3>Filtros das solicitações</h3><p>Encontre demandas por palavra-chave ou responsável.</p></div></div>
-              <button type="button" className="requestFilterClear" onClick={()=>{setSearch("");setRequestUserFilter("Todos")}}>Limpar filtros</button>
+              <button type="button" className="secondary" style={{padding:"8px 12px",fontSize:12}} onClick={()=>{setSearch("");setRequestUserFilter("Todos")}}>Limpar filtros</button>
             </div>
             <div className="requestFilterGrid">
               <div className="requestFilterField"><label htmlFor="request-search">Buscar solicitações</label><div className="requestFilterSearch"><Search size={16}/><input id="request-search" className="requestFilterControl" placeholder="Título, área, responsável ou status..." value={search} onChange={e=>setSearch(e.target.value)}/></div></div>
@@ -1235,13 +1243,13 @@ export default function Home() {
             </div>
             <div className="requestFilterBottom"><span><strong>{filtered.length}</strong> registro(s) encontrado(s)</span></div>
           </section>
-          <div className="panel"><TaskTable tasks={filtered} onSelect={setSelected} unreadCounts={unreadCounts}/></div></>}
+          <div className="panel"><TaskTable tasks={pageItems("requests",filtered)} onSelect={setSelected} unreadCounts={unreadCounts}/><Pagination {...paginationProps("requests",filtered.length)}/></div></>}
         {active==="Pedidos de Materiais" && <>
           <div className="pageHeading"><div><p className="eyebrow">SUPRIMENTOS INTERNOS</p><h1>Pedidos de Materiais</h1><p className="sub">Solicite materiais, acompanhe aprovações e consulte a separação e entrega.</p></div><div style={{display:"flex",gap:10,flexWrap:"wrap"}}><button className="secondary" onClick={loadMaterialOrders} disabled={ordersLoading}><RefreshCw size={15}/> Atualizar</button><button className="primary" onClick={()=>{setOrdersError("");setOrderAreaId(myOrderAreas.some(a=>a.id===profile?.area_id)?profile?.area_id||"":myOrderAreas[0]?.id||"");setShowNewMaterialOrder(true)}} disabled={!myOrderAreas.length}><Plus size={16}/> Novo pedido</button></div></div>
           {ordersError&&<div className="errorBanner"><span>{ordersError}</span><button onClick={()=>setOrdersError("")}>Fechar</button></div>}
           <div className="stats"><Stat icon={<ClipboardList/>} label="Pedidos visíveis" value={materialOrders.length} tone="blue"/><Stat icon={<Clock3/>} label="Aguardando gestor" value={pendingManagerOrders} tone="violet"/><Stat icon={<PackageCheck/>} label="Aguardando estoque" value={pendingStockOrders} tone="amber"/><Stat icon={<Layers/>} label="Em atendimento" value={activeMaterialOrders} tone="green"/></div>
           <div className="panel"><div className="panelHead"><div><h3>Pedidos cadastrados</h3><p>Os pedidos exibidos respeitam as permissões de acesso do seu perfil.</p></div><span className="muted">{materialOrders.length} registro(s)</span></div>
-            {ordersLoading?<div className="emptyTable">Carregando pedidos de materiais...</div>:!materialOrders.length?<div className="emptyTable">Nenhum pedido de materiais encontrado. Use “Novo pedido” para registrar a primeira solicitação.</div>:<div className="tableWrap"><table><thead><tr><th>Pedido</th><th>Solicitante / Área</th><th>Necessário em</th><th>Materiais</th><th>Status</th><th style={{textAlign:"right"}}>Ação</th></tr></thead><tbody>{materialOrders.map(order=>{const count=materialOrderItems.filter(item=>item.order_id===order.id).length;return <tr key={order.id}><td><div style={{display:"flex",flexDirection:"column",gap:3}}><b style={{whiteSpace:"nowrap"}}>#{order.protocol}</b><span className="muted" style={{fontSize:12}}>{new Date(order.created_at).toLocaleDateString("pt-BR")}</span></div></td><td><div style={{display:"flex",flexDirection:"column",gap:3,minWidth:130}}><b>{orderRequesterName(order.requester_id)}</b><span className="muted" style={{fontSize:12}}>{orderAreaName(order.area_id)}</span></div></td><td style={{whiteSpace:"nowrap"}}>{order.needed_by?new Date(order.needed_by+"T12:00:00").toLocaleDateString("pt-BR"):"—"}</td><td><span style={{display:"inline-flex",alignItems:"center",justifyContent:"center",minWidth:28,padding:"4px 9px",borderRadius:20,background:"var(--surface-soft,#f4f2f8)",fontSize:12,fontWeight:700}}>{count}</span><span className="muted" style={{fontSize:12,marginLeft:7}}>{count===1?"material":"materiais"}</span></td><td><span className={`status ${order.status==="concluido"?"green":order.status.startsWith("rejeitado")||order.status==="cancelado"?"red":order.status.includes("aguardando")?"amber":"blue"}`}>{orderStatusLabels[order.status]}</span></td><td style={{textAlign:"right"}}><button className="textButton" style={{whiteSpace:"nowrap"}} onClick={()=>setSelectedMaterialOrder(order.id)}>Ver detalhes <ArrowUpRight size={14}/></button></td></tr>})}</tbody></table></div>}
+            {ordersLoading?<div className="emptyTable">Carregando pedidos de materiais...</div>:!materialOrders.length?<div className="emptyTable">Nenhum pedido de materiais encontrado. Use “Novo pedido” para registrar a primeira solicitação.</div>:<div className="tableWrap"><table><thead><tr><th>Pedido</th><th>Solicitante / Área</th><th>Necessário em</th><th>Materiais</th><th>Status</th><th style={{textAlign:"right"}}>Ação</th></tr></thead><tbody>{pageItems("orders",materialOrders).map(order=>{const count=materialOrderItems.filter(item=>item.order_id===order.id).length;return <tr key={order.id}><td><div style={{display:"flex",flexDirection:"column",gap:3}}><b style={{whiteSpace:"nowrap"}}>#{order.protocol}</b><span className="muted" style={{fontSize:12}}>{new Date(order.created_at).toLocaleDateString("pt-BR")}</span></div></td><td><div style={{display:"flex",flexDirection:"column",gap:3,minWidth:130}}><b>{orderRequesterName(order.requester_id)}</b><span className="muted" style={{fontSize:12}}>{orderAreaName(order.area_id)}</span></div></td><td style={{whiteSpace:"nowrap"}}>{order.needed_by?new Date(order.needed_by+"T12:00:00").toLocaleDateString("pt-BR"):"—"}</td><td><span style={{display:"inline-flex",alignItems:"center",justifyContent:"center",minWidth:28,padding:"4px 9px",borderRadius:20,background:"var(--surface-soft,#f4f2f8)",fontSize:12,fontWeight:700}}>{count}</span><span className="muted" style={{fontSize:12,marginLeft:7}}>{count===1?"material":"materiais"}</span></td><td><span className={`status ${order.status==="concluido"?"green":order.status.startsWith("rejeitado")||order.status==="cancelado"?"red":order.status.includes("aguardando")?"amber":"blue"}`}>{orderStatusLabels[order.status]}</span></td><td style={{textAlign:"right"}}><button className="textButton" style={{whiteSpace:"nowrap"}} onClick={()=>setSelectedMaterialOrder(order.id)}>Ver detalhes <ArrowUpRight size={14}/></button></td></tr>})}</tbody></table></div>}<Pagination {...paginationProps("orders",materialOrders.length)}/>
           </div>
           {selectedOrder&&<div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setSelectedMaterialOrder(null)}}>
             <div className="modal" style={{width:"min(820px,100%)",maxWidth:820,maxHeight:"90vh",padding:26,overflowY:"auto"}}>
@@ -1256,7 +1264,7 @@ export default function Home() {
               <div className="notice" style={{marginTop:16}}><b>Finalidade:</b> {selectedOrder.purpose}</div>
               <div style={{marginTop:20}}>
                 <div className="panelHead"><div><h3>Materiais solicitados</h3><p>{selectedOrderItems.length} item(ns) neste pedido.</p></div></div>
-                <div className="tableWrap"><table><thead><tr><th>Material</th><th>Código</th><th>Quantidade</th><th>Unidade</th></tr></thead><tbody>{selectedOrderItems.map(item=><tr key={item.id}><td><b>{item.material?.name||"Material"}</b></td><td>{item.material?.sku||"—"}</td><td>{Number(item.quantity).toLocaleString("pt-BR")}</td><td>{item.material?.unit||"un"}</td></tr>)}</tbody></table></div>
+                <div className="tableWrap"><table><thead><tr><th>Material</th><th>Código</th><th>Quantidade</th><th>Unidade</th></tr></thead><tbody>{pageItems("orderItems",selectedOrderItems).map(item=><tr key={item.id}><td><b>{item.material?.name||"Material"}</b></td><td>{item.material?.sku||"—"}</td><td>{Number(item.quantity).toLocaleString("pt-BR")}</td><td>{item.material?.unit||"un"}</td></tr>)}</tbody></table></div><Pagination {...paginationProps("orderItems",selectedOrderItems.length)}/>
               </div>
               {selectedOrder.rejection_reason&&<div className="errorBox" style={{marginTop:14}}>Justificativa: {selectedOrder.rejection_reason}</div>}
               <div style={{display:"flex",gap:9,flexWrap:"wrap",marginTop:20}}>
@@ -1268,7 +1276,7 @@ export default function Home() {
               </div>
               <div style={{marginTop:24}}>
                 <div className="panelHead"><div><h3><History size={16} style={{display:"inline",verticalAlign:"-3px",marginRight:6}}/>Histórico do pedido</h3><p>Registro cronológico das aprovações e movimentações.</p></div></div>
-                {!selectedOrderHistory.length?<div className="emptyTable">Nenhum evento registrado.</div>:<div className="timeline">{[...selectedOrderHistory].reverse().map(event=><div className="timelineItem" key={event.id}><div className="timelineInfo"><b>{event.details||event.action.replaceAll("_"," ")}</b><small>{event.actor_name||"Usuário"} · {new Date(event.created_at).toLocaleString("pt-BR")}</small></div>{event.new_status&&<span className="status blue">{orderStatusLabels[event.new_status as MaterialOrderStatus]||event.new_status}</span>}</div>)}</div>}
+                {!selectedOrderHistory.length?<div className="emptyTable">Nenhum evento registrado.</div>:<div className="timeline">{pageItems("orderHistory",[...selectedOrderHistory].reverse()).map(event=><div className="timelineItem" key={event.id}><div className="timelineInfo"><b>{event.details||event.action.replaceAll("_"," ")}</b><small>{event.actor_name||"Usuário"} · {new Date(event.created_at).toLocaleString("pt-BR")}</small></div>{event.new_status&&<span className="status blue">{orderStatusLabels[event.new_status as MaterialOrderStatus]||event.new_status}</span>}</div>)}</div>}<Pagination {...paginationProps("orderHistory",selectedOrderHistory.length)}/>
               </div>
               <div className="modalActions"><button className="secondary" onClick={()=>setSelectedMaterialOrder(null)}>Fechar</button></div>
             </div>
@@ -1304,7 +1312,7 @@ export default function Home() {
           <section className="panel scheduleFilterCard">
             <div className="scheduleFilterTop">
               <div className="scheduleFilterTitle"><span className="scheduleFilterIcon"><CalendarDays size={19}/></span><div><h3>Filtros do cronograma</h3><p>Personalize a agenda por prazo, responsável, área e status.</p></div></div>
-              <button className="scheduleFilterClear" onClick={()=>{setScheduleOwnerFilter("Todos");setScheduleAreaFilter("Todas");setScheduleStatusFilter("Todos");setSchedulePeriod("all");setScheduleStartDate("");setScheduleEndDate("")}}>Limpar filtros</button>
+              <button className="secondary" style={{padding:"8px 12px",fontSize:12}} onClick={()=>{setScheduleOwnerFilter("Todos");setScheduleAreaFilter("Todas");setScheduleStatusFilter("Todos");setSchedulePeriod("all");setScheduleStartDate("");setScheduleEndDate("")}}>Limpar filtros</button>
             </div>
             <div className="scheduleFilterGrid">
               <div><label className="scheduleFieldLabel" htmlFor="schedule-period">Período</label><select id="schedule-period" className="scheduleSelect" value={schedulePeriod} onChange={e=>setSchedulePeriod(e.target.value)}><option value="all">Todos os prazos</option><option value="7">Próximos 7 dias</option><option value="30">Próximos 30 dias</option><option value="overdue">Somente atrasadas</option><option value="custom">Personalizado</option></select></div>
@@ -1316,13 +1324,13 @@ export default function Home() {
             <div className="scheduleFilterBottom"><span className="scheduleFilterSummary"><CalendarDays size={14}/> Visualização: <strong>{schedulePeriod==="all"?"Todos os prazos":schedulePeriod==="7"?"Próximos 7 dias":schedulePeriod==="30"?"Próximos 30 dias":schedulePeriod==="overdue"?"Somente atrasadas":`Personalizado${scheduleStartDate||scheduleEndDate?` · ${scheduleStartDate?new Date(scheduleStartDate+"T12:00:00").toLocaleDateString("pt-BR"):"início livre"} até ${scheduleEndDate?new Date(scheduleEndDate+"T12:00:00").toLocaleDateString("pt-BR"):"sem limite"}`:" · informe as datas"}`}</strong></span><span className="scheduleFilterSummary">{scheduleTasks.length} resultado(s)</span></div>
           </section>
           <div className="panel"><div className="panelHead"><div><h3>Agenda de entregas</h3><p>Ordenada pelo prazo mais próximo. Selecione uma demanda para abrir seus detalhes.</p></div></div>
-            <div className="timeline">{scheduleTasks.map(t=><button className="timelineItem" key={t.id} onClick={()=>setSelected(t)}><div className="dateBlock"><b>{t.due?.slice(8,10)||"—"}</b><small>{t.due?new Date(t.due+"T12:00:00").toLocaleDateString("pt-BR",{month:"short"}):"Sem prazo"}</small></div><div className="timelineInfo"><b>{t.title}</b><small>{t.owner} · {t.area} · #{t.protocol}</small></div><div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>{t.status!=="Concluída"&&t.status!=="Cancelada"&&t.due&&t.due<scheduleToday&&<span className="status red">Atrasada</span>}<StatusBadge status={t.status}/></div></button>)}{!scheduleTasks.length&&<div className="emptyTable">Nenhuma solicitação encontrada com os filtros selecionados.</div>}</div>
+            <div className="timeline">{pageItems("schedule",scheduleTasks).map(t=><button className="timelineItem" key={t.id} onClick={()=>setSelected(t)}><div className="dateBlock"><b>{t.due?.slice(8,10)||"—"}</b><small>{t.due?new Date(t.due+"T12:00:00").toLocaleDateString("pt-BR",{month:"short"}):"Sem prazo"}</small></div><div className="timelineInfo"><b>{t.title}</b><small>{t.owner} · {t.area} · #{t.protocol}</small></div><div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>{t.status!=="Concluída"&&t.status!=="Cancelada"&&t.due&&t.due<scheduleToday&&<span className="status red">Atrasada</span>}<StatusBadge status={t.status}/></div></button>)}{!scheduleTasks.length&&<div className="emptyTable">Nenhuma solicitação encontrada com os filtros selecionados.</div>}</div><Pagination {...paginationProps("schedule",scheduleTasks.length)}/>
           </div>
         </>}
         {active==="Colaboradores" && <><div className="pageHeading"><div><p className="eyebrow">EQUIPE</p><h1>Colaboradores</h1><p className="sub">Gerencie áreas, perfis e situação dos usuários cadastrados.</p></div><button className="secondary" onClick={()=>session?.user&&loadData(session.user)}><RefreshCw size={15}/> Atualizar lista</button></div>
           <div className="panel"><div className="panelHead"><div><h3>Equipe cadastrada</h3><p>{members.length} colaborador(es) cadastrado(s)</p></div></div>
             {profile?.role==="admin"&&<div className="notice">Para adicionar uma pessoa, primeiro crie o usuário em Supabase → Authentication → Users → Add user. O banco cria o perfil automaticamente. Depois atualize esta lista para gerenciar sua área e função.</div>}
-            <div className="memberGrid">{members.map(m=><button className="memberCard memberButton" key={m.id} onClick={()=>{setSelectedMember(m);setMemberTaskStatus("Todas");setMemberForm({full_name:m.full_name,role:m.role,area_ids:m.area_ids||[],active:m.active,stock_manager:m.stock_manager===true});setMemberMessage("")}}><div className="userAvatar">{m.full_name.split(" ").map(x=>x[0]).slice(0,2).join("")}</div><b>{m.full_name}</b><small>{m.email||"Sem e-mail"}</small><small>{m.role==="admin"?"Administrador":m.role==="gestor"?"Gestor":"Colaborador"}</small><small>{(m.area_ids||[]).length ? areas.filter(a=>(m.area_ids||[]).includes(a.id)).map(a=>a.name).join(" · ") : "Área não definida"}</small></button>)}{!members.length&&<div className="emptyTable">Nenhum colaborador visível para este perfil.</div>}</div>
+            <div className="memberGrid">{pageItems("members",members).map(m=><button className="memberCard memberButton" key={m.id} onClick={()=>{setSelectedMember(m);setMemberTaskStatus("Todas");setMemberForm({full_name:m.full_name,role:m.role,area_ids:m.area_ids||[],active:m.active,stock_manager:m.stock_manager===true});setMemberMessage("")}}><div className="userAvatar">{m.full_name.split(" ").map(x=>x[0]).slice(0,2).join("")}</div><b>{m.full_name}</b><small>{m.email||"Sem e-mail"}</small><small>{m.role==="admin"?"Administrador":m.role==="gestor"?"Gestor":"Colaborador"}</small><small>{(m.area_ids||[]).length ? areas.filter(a=>(m.area_ids||[]).includes(a.id)).map(a=>a.name).join(" · ") : "Área não definida"}</small></button>)}{!members.length&&<div className="emptyTable">Nenhum colaborador visível para este perfil.</div>}</div><Pagination {...paginationProps("members",members.length)}/>
           </div></>}
         {active==="Estoque" && <>
           <div className="pageHeading">
@@ -1359,7 +1367,7 @@ export default function Home() {
               </div>
               {stockAlerts.length === 0 ? <div className="emptyTable">Nenhum alerta. Todos os materiais estão acima do estoque mínimo.</div> : (
                 <div style={{display:"grid",gap:10}}>
-                  {stockAlerts.map(alert => {
+                  {pageItems("stockAlerts",stockAlerts).map(alert => {
                     const color = alert.level === "critical" ? "#b42318" : alert.level === "warning" ? "#b54708" : "#7a5b00";
                     const background = alert.level === "critical" ? "#fff1f0" : alert.level === "warning" ? "#fff7ed" : "#fffbeb";
                     return <div key={alert.material.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:16,flexWrap:"wrap",padding:"13px 15px",border:"1px solid #eaecf0",borderRadius:10}}>
@@ -1376,7 +1384,7 @@ export default function Home() {
                     </div>;
                   })}
                 </div>
-              )}
+              )}<Pagination {...paginationProps("stockAlerts",stockAlerts.length)}/>
             </div>
           </>}
           <div className="panel">
@@ -1387,7 +1395,7 @@ export default function Home() {
             </div>
             {stockLoading ? <div className="emptyTable">Carregando materiais...</div> : !filteredMaterials.length ? <div className="emptyTable">Nenhum material cadastrado. {canManageStock?"Use “Novo material” para começar.":""}</div> :
               <div className="tableWrap"><table><thead><tr><th>Material</th><th>Código</th><th>Estoque físico</th>{canManageStock&&<><th>Reservado</th><th>Disponível</th></>}<th>Estoque mínimo</th><th>Situação</th>{canManageStock&&<th>Ação</th>}</tr></thead><tbody>
-                {filteredMaterials.map(m=>{
+                {pageItems("materials",filteredMaterials).map(m=>{
                   const reserved = reservedByMaterial[m.id] || 0;
                   const available = Number(m.quantity)-reserved;
                   const low = canManageStock && available <= Number(m.minimum_quantity);
@@ -1401,7 +1409,7 @@ export default function Home() {
                     {canManageStock&&<td><div style={{display:"flex",alignItems:"center",gap:10}}><button className="textButton" onClick={()=>openEditMaterial(m)}>Editar</button><button className="textButton" onClick={()=>{setMovementForm({material_id:m.id,movement_type:"entrada",quantity:"",request_id:"",notes:""});setShowStockMovement(true)}}>Movimentar</button></div></td>}
                   </tr>;
                 })}
-              </tbody></table></div>}
+              </tbody></table></div>}<Pagination {...paginationProps("materials",filteredMaterials.length)}/>
           </div>
           {canManageStock && <>
             <style>{`
@@ -1431,7 +1439,7 @@ export default function Home() {
             <section className="panel stockReportFilters">
               <div className="stockReportTop">
                 <div className="stockReportTitle"><span className="stockReportIcon"><CalendarDays size={19}/></span><div><h3>Relatório de movimentações</h3><p>Consulte e refine as entradas, saídas, ajustes e movimentações de reservas.</p></div></div>
-                <button className="stockReportClear" onClick={()=>{setStockReportMaterial("Todos");setStockReportType("Todos");setStockReportStart("");setStockReportEnd("")}}>Limpar filtros</button>
+                <button className="secondary" style={{padding:"8px 12px",fontSize:12}} onClick={()=>{setStockReportMaterial("Todos");setStockReportType("Todos");setStockReportStart("");setStockReportEnd("")}}>Limpar filtros</button>
               </div>
               <div className="stockReportGrid">
                 <div><label className="stockReportFieldLabel" htmlFor="stock-report-material">Material</label><select id="stock-report-material" className="stockReportControl" value={stockReportMaterial} onChange={e=>setStockReportMaterial(e.target.value)}><option value="Todos">Todos os materiais</option>{stockMaterials.map(material=><option key={material.id} value={material.id}>{material.name}</option>)}</select></div>
@@ -1458,7 +1466,7 @@ export default function Home() {
               </div>
               {!filteredStockMovements.length ? <div className="emptyTable">Nenhuma movimentação encontrada para os filtros selecionados.</div> :
                 <div className="tableWrap"><table><thead><tr><th>Data</th><th>Material</th><th>Tipo</th><th>Quantidade</th><th>Origem</th><th>Observações</th></tr></thead><tbody>
-                  {filteredStockMovements.map(m=>{
+                  {pageItems("stockMovements",filteredStockMovements).map(m=>{
                     const material=stockMaterials.find(item=>item.id===m.material_id);
                     const request=tasks.find(item=>item.id===m.request_id);
                     const labels:Record<string,string>={entrada:"Entrada",saida:"Saída",reserva:"Reserva",cancelamento_reserva:"Cancelamento de reserva",ajuste:"Ajuste"};
@@ -1471,7 +1479,7 @@ export default function Home() {
                       <td>{m.notes||"—"}</td>
                     </tr>;
                   })}
-                </tbody></table></div>}
+                </tbody></table></div>}<Pagination {...paginationProps("stockMovements",filteredStockMovements.length)}/>
             </section>
           </>}
         </>}
@@ -1497,7 +1505,7 @@ export default function Home() {
             @media(max-width:600px){.reportFilterCard,.reportPanel{padding:18px}.reportCustomDates{grid-template-columns:1fr}.reportPeriodButton{flex:1 1 calc(50% - 7px)}}
           `}</style>
           <section className="panel reportFilterCard">
-            <div className="reportFilterTop"><div className="reportFilterTitle"><span className="reportFilterIcon"><CalendarDays size={19}/></span><div><h3>Filtros dos relatórios</h3><p>Selecione o período e refine os dados que deseja analisar.</p></div></div><button className="reportClear" onClick={()=>{setReportDateMode("created");setReportPeriod("all");setReportStartDate("");setReportEndDate("");setReportAreaFilter("Todas");setReportOwnerFilter("Todos");setReportStatusFilter("Todos")}}>Limpar filtros</button></div>
+            <div className="reportFilterTop"><div className="reportFilterTitle"><span className="reportFilterIcon"><CalendarDays size={19}/></span><div><h3>Filtros dos relatórios</h3><p>Selecione o período e refine os dados que deseja analisar.</p></div></div><button className="secondary" style={{padding:"8px 12px",fontSize:12}} onClick={()=>{setReportDateMode("created");setReportPeriod("all");setReportStartDate("");setReportEndDate("");setReportAreaFilter("Todas");setReportOwnerFilter("Todos");setReportStatusFilter("Todos")}}>Limpar filtros</button></div>
             <div className="reportFilterGrid">
               <div><label className="reportFieldLabel" htmlFor="report-date-mode">Considerar data</label><select id="report-date-mode" className="reportSelect" value={reportDateMode} onChange={e=>setReportDateMode(e.target.value as "created"|"completed"|"due")}><option value="created">Data de abertura</option><option value="completed">Data de conclusão</option><option value="due">Data do prazo</option></select></div>
               <div><label className="reportFieldLabel" htmlFor="report-area">Área</label><select id="report-area" className="reportSelect" value={reportAreaFilter} onChange={e=>setReportAreaFilter(e.target.value)}><option value="Todas">Todas as áreas</option>{areas.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
@@ -1516,10 +1524,10 @@ export default function Home() {
             <section className="panel reportPanel"><div className="reportPanelHead"><div><h3>Distribuição por área</h3><p>Participação de cada área no volume total</p></div></div>{!reportByArea.length?<div className="emptyTable">Não há solicitações no período selecionado.</div>:<div className="reportBars">{reportByArea.map(item=><div className="reportBarRow" key={item.name}><div><span>{item.name}</span><b>{item.total}</b></div><div className="reportBarTrack"><i style={{width:`${reportTasks.length?item.total/reportTasks.length*100:0}%`}}/></div></div>)}</div>}</section>
           </div>
           <div className="gridMain" style={{marginTop:18}}>
-            <section className="panel reportPanel"><div className="reportPanelHead"><div><h3>Desempenho da equipe</h3><p>Solicitações atribuídas por responsável</p></div></div>{!reportByOwner.length?<div className="emptyTable">Não há solicitações atribuídas no período.</div>:<div className="tableWrap"><table><thead><tr><th>Responsável</th><th>Total</th><th>Concluídas</th><th>Em andamento</th><th>Atrasadas</th></tr></thead><tbody>{reportByOwner.map(person=><tr key={person.id}><td><b>{person.name}</b></td><td>{person.total}</td><td>{person.done}</td><td>{person.inProgress}</td><td>{person.late}</td></tr>)}</tbody></table></div>}</section>
+            <section className="panel reportPanel"><div className="reportPanelHead"><div><h3>Desempenho da equipe</h3><p>Solicitações atribuídas por responsável</p></div></div>{!reportByOwner.length?<div className="emptyTable">Não há solicitações atribuídas no período.</div>:<div className="tableWrap"><table><thead><tr><th>Responsável</th><th>Total</th><th>Concluídas</th><th>Em andamento</th><th>Atrasadas</th></tr></thead><tbody>{pageItems("reportOwners",reportByOwner).map(person=><tr key={person.id}><td><b>{person.name}</b></td><td>{person.total}</td><td>{person.done}</td><td>{person.inProgress}</td><td>{person.late}</td></tr>)}</tbody></table></div>}<Pagination {...paginationProps("reportOwners",reportByOwner.length)}/></section>
             <section className="panel reportPanel"><div className="reportPanelHead"><div><h3>Taxa de conclusão</h3><p>Percentual de demandas concluídas no resultado filtrado</p></div></div><div className="reportRate"><strong>{reportCompletionRate}%</strong><span>{reportDone} de {reportCompletionBase} solicitações válidas concluídas</span></div><div className="reportBarTrack" style={{marginTop:16,height:12}}><i style={{display:"block",height:"100%",width:`${reportCompletionRate}%`,borderRadius:99,background:"linear-gradient(90deg,#9b5cdb,#7624c7)"}}/></div><div style={{marginTop:22,paddingTop:18,borderTop:"1px solid #f0edf4"}}><div className="reportPanelHead"><div><h3>Solicitações em atraso</h3><p>{reportLate} de {reportOpenBase} solicitações abertas estão com prazo vencido</p></div><strong style={{fontSize:24,color:"#b42318"}}>{reportOverdueRate}%</strong></div><div className="reportBarTrack" style={{height:10}}><i style={{display:"block",height:"100%",width:`${reportOverdueRate}%`,borderRadius:99,background:"#d92d20"}}/></div></div></section>
           </div>
-          <section className="panel reportPanel" style={{marginTop:18}}><div className="reportPanelHead"><div><h3>Detalhamento das solicitações</h3><p>Consulte os registros que compõem os indicadores acima.</p></div></div><TaskTable tasks={[...reportTasks].sort((a,b)=>b.created.localeCompare(a.created))} onSelect={setSelected} unreadCounts={unreadCounts}/></section>
+          <section className="panel reportPanel" style={{marginTop:18}}><div className="reportPanelHead"><div><h3>Detalhamento das solicitações</h3><p>Consulte os registros que compõem os indicadores acima.</p></div></div><TaskTable tasks={pageItems("reportTasks",[...reportTasks].sort((a,b)=>b.created.localeCompare(a.created)))} onSelect={setSelected} unreadCounts={unreadCounts}/><Pagination {...paginationProps("reportTasks",reportTasks.length)}/></section>
         </>}
         {active==="Configurações" && <><div className="pageHeading"><div><p className="eyebrow">ADMINISTRAÇÃO</p><h1>Configurações</h1><p className="sub">Parâmetros do ambiente e sua conta.</p></div></div><div className="panel"><h3>Áreas cadastradas no Supabase</h3><div className="areaList">{areaNames.map(a=><div key={a}><Layers size={17}/>{a}<span>Ativa</span></div>)}</div><p className="notice">Usuário conectado: {profile?.email}. Perfil: {profile?.role}. A prioridade é controlada por gestores e administradores.</p></div></>}
         {active==="Auditoria" && profile?.role==="admin" && <>
@@ -1548,7 +1556,7 @@ export default function Home() {
             @media(max-width:900px){.auditFilterGrid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:560px){.auditFilterCard{padding:17px}.auditFilterGrid,.auditDateGrid{grid-template-columns:1fr}.auditFilterTop{flex-direction:column}}
           `}</style>
           <section className="panel auditFilterCard">
-            <div className="auditFilterTop"><div className="auditFilterTitle"><span className="auditFilterIcon"><FileSearch size={19}/></span><div><h3>Filtros do histórico</h3><p>Refine os registros por período, colaborador, módulo ou operação.</p></div></div><button type="button" className="dashClear" onClick={()=>{setAuditSearch("");setAuditActorFilter("Todos");setAuditModuleFilter("Todos");setAuditActionFilter("Todos");setAuditStartDate("");setAuditEndDate("")}}>Limpar filtros</button></div>
+            <div className="auditFilterTop"><div className="auditFilterTitle"><span className="auditFilterIcon"><FileSearch size={19}/></span><div><h3>Filtros do histórico</h3><p>Refine os registros por período, colaborador, módulo ou operação.</p></div></div><button type="button" className="secondary" style={{padding:"8px 12px",fontSize:12}} onClick={()=>{setAuditSearch("");setAuditActorFilter("Todos");setAuditModuleFilter("Todos");setAuditActionFilter("Todos");setAuditStartDate("");setAuditEndDate("")}}>Limpar filtros</button></div>
             <div className="auditFilterGrid">
               <label className="auditField">Buscar registro<input className="auditControl" value={auditSearch} onChange={e=>setAuditSearch(e.target.value)} placeholder="Nome, e-mail ou identificador..."/></label>
               <label className="auditField">Colaborador<select className="auditControl" value={auditActorFilter} onChange={e=>setAuditActorFilter(e.target.value)}><option value="Todos">Todos</option>{auditActors.map(actor=><option key={actor} value={actor}>{actor}</option>)}</select></label>
@@ -1562,14 +1570,14 @@ export default function Home() {
           <section className="panel">
             <div className="panelHead"><div><h3>Histórico de operações</h3><p>Valores anteriores e novos ficam disponíveis em cada registro.</p></div><span className="muted">{auditLogs.length} carregados</span></div>
             {auditLoading&&!auditLogs.length?<div className="auditEmpty">Carregando histórico de auditoria...</div>:!filteredAuditLogs.length?<div className="auditEmpty">Nenhum registro encontrado com os filtros selecionados.</div>:<div className="auditTableWrap"><table className="auditTable"><thead><tr><th>Data e hora</th><th>Colaborador</th><th>Ação</th><th>Módulo</th><th>Registro</th><th>Detalhes</th></tr></thead><tbody>
-              {filteredAuditLogs.map(log=>{
+              {pageItems("audit",filteredAuditLogs).map(log=>{
                 const oldValues=log.old_values||{};const newValues=log.new_values||{};
                 const keys=[...new Set([...Object.keys(oldValues),...Object.keys(newValues)])].filter(key=>!["created_at","updated_at"].includes(key));
                 const displayValue=(value:any)=>value===null||value===undefined?"—":typeof value==="object"?JSON.stringify(value):String(value);
                 const changes=keys.filter(key=>JSON.stringify(oldValues[key])!==JSON.stringify(newValues[key]));
                 return <tr key={log.id}><td style={{whiteSpace:"nowrap"}}>{new Date(log.created_at).toLocaleString("pt-BR")}</td><td><div className="auditActor"><b>{log.actor_name||"Sistema"}</b><small>{log.actor_email||"Ação automática"}</small></div></td><td><span className={`auditAction ${log.action.toLowerCase()}`}>{log.action==="INSERT"?"Inclusão":log.action==="UPDATE"?"Alteração":"Exclusão"}</span></td><td style={{whiteSpace:"nowrap",textTransform:"capitalize"}}>{log.table_name.replaceAll("_"," ")}</td><td style={{fontFamily:"monospace",fontSize:10}}>{log.record_id||"—"}</td><td><button type="button" onClick={()=>setSelectedAuditLog(log)} style={{border:0,background:"transparent",padding:0,color:"#7a1bd8",fontWeight:700,fontSize:12,cursor:"pointer",whiteSpace:"nowrap"}}>Ver {changes.length||keys.length} campo(s)</button></td></tr>;
               })}
-            </tbody></table></div>}
+            </tbody></table></div>}<Pagination {...paginationProps("audit",filteredAuditLogs.length)}/>
           </section>
         </>}
       </div>
@@ -1646,7 +1654,7 @@ export default function Home() {
           <Stat icon={<AlertTriangle/>} label="Atrasadas" value={memberTasksLate} tone="red"/>
         </div>
         <div className="toolbar" style={{alignItems:"end",gap:18,flexWrap:"wrap"}}><div><b>Lista de demandas</b><p className="muted">Clique em uma demanda para abrir os detalhes e supervisionar o andamento.</p></div><div style={{width:"min(240px,100%)"}}><label className="scheduleFieldLabel" htmlFor="member-task-status">Filtrar por status</label><select id="member-task-status" className="scheduleSelect" value={memberTaskStatus} onChange={e=>setMemberTaskStatus(e.target.value)}><option value="Todas">Todos os status</option>{(["Recebida","Em análise","Aguardando aprovação","Em execução","Concluída","Cancelada"] as Status[]).map(status=><option key={status} value={status}>{status}</option>)}</select></div></div>
-        <div style={{maxHeight:"48vh",overflowY:"auto",width:"100%"}}><TaskTable tasks={visibleMemberTasks} onSelect={task=>{setSelectedMember(null);setSelected(task)}} unreadCounts={unreadCounts}/></div>
+        <div style={{maxHeight:"48vh",overflowY:"auto",width:"100%"}}><TaskTable tasks={pageItems("memberTasks",visibleMemberTasks)} onSelect={task=>{setSelectedMember(null);setSelected(task)}} unreadCounts={unreadCounts}/><Pagination {...paginationProps("memberTasks",visibleMemberTasks.length)}/></div>
       </div>
     </div></div>}
     {selected&&<div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setSelected(null)}}><div className="modal requestDetailModal"><div className="modalHead"><div><p className="eyebrow">PROTOCOLO #{selected.protocol}</p><h2>{selected.title}</h2><p>{selected.area} · Aberta em {new Date(selected.created+"T12:00:00").toLocaleDateString("pt-BR")}</p></div><button className="iconButton" onClick={()=>setSelected(null)}><X/></button></div><div className="detailGrid"><div><small>Responsável</small><b>{selected.owner}</b></div><div><small>Prazo</small><b>{new Date(selected.due+"T12:00:00").toLocaleDateString("pt-BR")}</b></div><div><small>Prioridade</small><b>{selected.priority}</b></div><div><small>Status atual</small><StatusBadge status={selected.status}/></div></div><p className="description">{selected.description||"Sem descrição adicional."}</p>
@@ -1666,7 +1674,7 @@ export default function Home() {
           <span style={{fontSize:11,fontWeight:700,color:(unreadCounts[selected.id]||0)>0?"#7020c5":"#667085",background:(unreadCounts[selected.id]||0)>0?"#f2e8ff":"#f1f1f5",padding:"6px 10px",borderRadius:20}}>{unreadCounts[selected.id]||0} não lida(s)</span>
         </div>
         <div style={{display:"grid",gap:10,maxHeight:320,overflowY:"auto",padding:"4px 2px 10px"}}>
-          {commentsLoading&&!requestComments.length?<div className="emptyTable">Carregando conversa...</div>:!requestComments.length?<div className="emptyTable">Nenhuma mensagem ainda. Use o campo abaixo para iniciar a conversa.</div>:requestComments.map(message=>{
+          {commentsLoading&&!requestComments.length?<div className="emptyTable">Carregando conversa...</div>:!requestComments.length?<div className="emptyTable">Nenhuma mensagem ainda. Use o campo abaixo para iniciar a conversa.</div>:pageItems("comments",requestComments).map(message=>{
             const mine=message.author_id===profile?.id;
             return <div key={message.id} style={{display:"flex",justifyContent:mine?"flex-end":"flex-start"}}>
               <div style={{maxWidth:"88%",minWidth:150,padding:"10px 12px",borderRadius:12,border:mine?"1px solid #e2d2f4":"1px solid #e7e8ef",background:mine?"#f5edff":"#fff"}}>
@@ -1678,7 +1686,7 @@ export default function Home() {
               </div>
             </div>;
           })}
-        </div>
+        </div><Pagination {...paginationProps("comments",requestComments.length)}/>
         {commentsError&&<div className="errorBox" style={{marginTop:10}}>{commentsError}</div>}
         <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) auto",alignItems:"end",gap:10,marginTop:12}}>
           <label style={{display:"grid",gap:6,fontSize:12,fontWeight:600,color:"#565568"}}>Nova mensagem
@@ -1692,6 +1700,7 @@ export default function Home() {
       {dataError&&<div className="errorBox" style={{marginTop:12}}>{dataError}</div>}</div></div>}
   </main>;
 }
+function Pagination({page,pageSize,total,totalPages,onPageChange,onPageSizeChange}:{page:number;pageSize:number;total:number;totalPages:number;onPageChange:(page:number)=>void;onPageSizeChange:(size:number)=>void}) { if(total<=10&&pageSize===10)return null; const start=total?((page-1)*pageSize)+1:0; const end=Math.min(page*pageSize,total); const pages=Array.from({length:totalPages},(_,i)=>i+1); const visible=pages.length<=5?pages:[...new Set([1,...pages.filter(p=>Math.abs(p-page)<=1),totalPages])].sort((a,b)=>a-b); return <div className="listPagination"><span className="paginationSummary">Exibindo <b>{start}–{end}</b> de <b>{total}</b> registros</span><div className="paginationControls"><label className="paginationSize">Por página<select value={pageSize} onChange={e=>onPageSizeChange(Number(e.target.value))}><option value={10}>10</option><option value={20}>20</option><option value={50}>50</option></select></label><button type="button" className="paginationButton" disabled={page<=1} onClick={()=>onPageChange(page-1)}>Anterior</button>{visible.map((p,index)=><React.Fragment key={p}>{index>0&&p-visible[index-1]>1&&<span className="paginationDots">…</span>}<button type="button" className={`paginationButton paginationNumber ${page===p?"active":""}`} aria-current={page===p?"page":undefined} onClick={()=>onPageChange(p)}>{p}</button></React.Fragment>)}<button type="button" className="paginationButton" disabled={page>=totalPages} onClick={()=>onPageChange(page+1)}>Próxima</button></div></div>; }
 function Stat({icon,label,value,tone}:{icon:React.ReactNode,label:string,value:number,tone:string}) { return <div className="statCard"><div className={`statIcon ${tone}`}>{icon}</div><div><small>{label}</small><strong>{value}</strong></div></div>; }
 function StatusBadge({status}:{status:Status}) { return <span className={`status ${statusClass[status]}`}>{status}</span>; }
 function TaskTable({tasks,onSelect,unreadCounts={}}:{tasks:Task[],onSelect:(t:Task)=>void,unreadCounts?:Record<string,number>}) { if(!tasks.length)return <div className="emptyTable">Nenhuma solicitação cadastrada no Supabase.</div>; return <div className="tableWrap"><table><thead><tr><th>Solicitação</th><th>Área</th><th>Responsável</th><th>Prioridade</th><th>Prazo</th><th>Status</th></tr></thead><tbody>{tasks.map(t=><tr key={t.id} onClick={()=>onSelect(t)}><td><b>#{t.protocol}</b><span>{t.title}</span>{(unreadCounts[t.id]||0)>0&&<span style={{display:"inline-flex",alignItems:"center",gap:5,marginTop:5,padding:"4px 8px",borderRadius:20,background:"#f2e8ff",color:"#7020c5",fontSize:10,fontWeight:700}}><MessageCircle size={11}/>{unreadCounts[t.id]} não lida(s)</span>}</td><td>{t.area}</td><td>{t.owner}</td><td><span className={`priority ${t.priority.toLowerCase()}`}>{t.priority}</span></td><td>{new Date(t.due+"T12:00:00").toLocaleDateString("pt-BR")}</td><td><StatusBadge status={t.status}/></td></tr>)}</tbody></table></div>; }
