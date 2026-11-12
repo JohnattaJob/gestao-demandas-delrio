@@ -1398,8 +1398,8 @@ export default function Home() {
             <div><p className="eyebrow">MATERIAIS</p><h1>Estoque</h1><p className="sub">Controle de materiais promocionais, disponibilidade e movimentações.</p></div>
             {canManageStock && <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
               <button className="secondary" onClick={()=>loadStock()} disabled={stockLoading}><RefreshCw size={15}/> Atualizar</button>
-              <button className="secondary" onClick={openNewMaterial}><Plus size={16}/> Novo material</button>
-              <button className="primary" onClick={()=>{setMovementForm(old=>({...old,material_id:old.material_id||stockMaterials[0]?.id||""}));setShowStockMovement(true)}} disabled={!stockMaterials.length}><ArrowUpRight size={16}/> Nova movimentação</button>
+              {stockSection==="materiais" && <><button className="secondary" onClick={openNewMaterial}><Plus size={16}/> Novo material</button>
+              <button className="primary" onClick={()=>{setMovementForm(old=>({...old,material_id:old.material_id||stockMaterials[0]?.id||""}));setShowStockMovement(true)}} disabled={!stockMaterials.length}><ArrowUpRight size={16}/> Nova movimentação</button></>}
             </div>}
           </div>
           {stockError && <div className="errorBanner"><span>{stockError}</span><button onClick={()=>setStockError("")}>Fechar</button></div>}
