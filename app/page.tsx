@@ -144,6 +144,8 @@ export default function Home() {
   const [ordersStartDate,setOrdersStartDate] = useState("");
   const [ordersEndDate,setOrdersEndDate] = useState("");
   const [ordersPeriodPreset,setOrdersPeriodPreset] = useState<"all"|"month"|"last30"|"last90"|"year"|"custom">("all");
+  const [ordersStatusFilter,setOrdersStatusFilter] = useState<MaterialOrderStatus|"todos">("todos");
+  const [ordersAreaFilter,setOrdersAreaFilter] = useState("todos");
   const [materialOrderItems,setMaterialOrderItems] = useState<MaterialOrderItem[]>([]);
   const [materialOrderHistory,setMaterialOrderHistory] = useState<MaterialOrderHistory[]>([]);
   const [ordersLoading,setOrdersLoading] = useState(false);
@@ -878,7 +880,7 @@ export default function Home() {
     setOrdersEndDate(end);
   };
   const ordersDateRangeInvalid = Boolean(ordersStartDate && ordersEndDate && ordersStartDate>ordersEndDate);
-  const filteredMaterialOrders = ordersDateRangeInvalid ? [] : materialOrders.filter(order=>{const date=orderCreatedDate(order.created_at);return (!ordersStartDate||date>=ordersStartDate)&&(!ordersEndDate||date<=ordersEndDate);});
+  const filteredMaterialOrders = ordersDateRangeInvalid ? [] : materialOrders.filter(order=>{const date=orderCreatedDate(order.created_at);return (!ordersStartDate||date>=ordersStartDate)&&(!ordersEndDate||date<=ordersEndDate)&&(ordersStatusFilter==="todos"||order.status===ordersStatusFilter)&&(ordersAreaFilter==="todos"||order.area_id===ordersAreaFilter);});
   const selectedOrder = materialOrders.find(order=>order.id===selectedMaterialOrder) || null;
   const unreadNotificationCount = notifications.filter(item=>!item.is_read).length;
   const selectedOrderItems = materialOrderItems.filter(item=>item.order_id===selectedMaterialOrder);
@@ -1347,6 +1349,9 @@ export default function Home() {
              .ordersPresetButton{height:39px;padding:0 14px;border:1px solid #e1e2ea;border-radius:10px;background:#fff;color:#55536a;font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;transition:all .15s}
              .ordersPresetButton:hover{border-color:#b98be8;color:#7624c7}
              .ordersPresetButton.active{border-color:#8b24e8;background:#f5edff;color:#7624c7;box-shadow:0 0 0 1px rgba(122,27,216,.08)}
+             .ordersExtraFilters{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-top:14px}
+             .ordersSelect{width:100%;height:43px;box-sizing:border-box;border:1px solid #e1e2ea;border-radius:10px;background:#fff;padding:0 12px;color:#292837;font-size:13px;font-weight:500;font-family:inherit;outline:none}
+             .ordersSelect:focus{border-color:#9b5cdb;box-shadow:0 0 0 3px rgba(122,27,216,.10)}
              .ordersFilterBottom{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:18px;padding-top:14px;border-top:1px solid #f0edf4;flex-wrap:wrap;color:#777487;font-size:12px}
              .ordersFilterBottom strong{color:#4b3a60;font-weight:700}
              .ordersFilterClear{border:0;background:transparent;color:#7624c7;font-size:12px;font-weight:700;padding:9px 10px;border-radius:8px;cursor:pointer;white-space:nowrap}
@@ -1354,7 +1359,7 @@ export default function Home() {
              @media(max-width:560px){.ordersFilterCard{padding:18px}.ordersFilterGrid{grid-template-columns:1fr;gap:16px}.ordersFilterTop{margin-bottom:17px}}
            `}</style>
            <section className="panel ordersFilterCard">
-             <div className="ordersFilterTop"><div className="ordersFilterTitle"><span className="ordersFilterIcon"><CalendarDays size={19}/></span><div><h3>Filtrar por período</h3><p>Consulte os pedidos pela data em que foram solicitados.</p></div></div></div>
+             <div className="ordersFilterTop"><div className="ordersFilterTitle"><span className="ordersFilterIcon"><CalendarDays size={19}/></span><div><h3>Filtrar pedidos</h3><p>Combine período, status e área solicitante para refinar a consulta.</p></div></div><button type="button" className="ordersFilterClear" onClick={()=>{applyOrdersPeriod("all");setOrdersStatusFilter("todos");setOrdersAreaFilter("todos")}}>Limpar filtros</button></div>
               <p className="ordersPeriodLabel">Período de análise</p>
               <div className="ordersPresetRow">
                 <button type="button" className={`ordersPresetButton ${ordersPeriodPreset==="all"?"active":""}`} onClick={()=>applyOrdersPeriod("all")}>Todo o período</button>
@@ -1363,6 +1368,10 @@ export default function Home() {
                 <button type="button" className={`ordersPresetButton ${ordersPeriodPreset==="last90"?"active":""}`} onClick={()=>applyOrdersPeriod("last90")}>Últimos 90 dias</button>
                 <button type="button" className={`ordersPresetButton ${ordersPeriodPreset==="year"?"active":""}`} onClick={()=>applyOrdersPeriod("year")}>Este ano</button>
                 <button type="button" className={`ordersPresetButton ${ordersPeriodPreset==="custom"?"active":""}`} onClick={()=>applyOrdersPeriod("custom")}>Personalizado</button>
+              </div>
+              <div className="ordersExtraFilters">
+                <div><label className="ordersFieldLabel" htmlFor="orders-status-filter">Status do pedido</label><select id="orders-status-filter" className="ordersSelect" value={ordersStatusFilter} onChange={e=>setOrdersStatusFilter(e.target.value as MaterialOrderStatus|"todos")}><option value="todos">Todos os status</option>{(Object.entries(orderStatusLabels) as [MaterialOrderStatus,string][]).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></div>
+                <div><label className="ordersFieldLabel" htmlFor="orders-area-filter">Área solicitante</label><select id="orders-area-filter" className="ordersSelect" value={ordersAreaFilter} onChange={e=>setOrdersAreaFilter(e.target.value)}><option value="todos">Todas as áreas</option>{areas.slice().sort((a,b)=>a.name.localeCompare(b.name,"pt-BR")).map(area=><option key={area.id} value={area.id}>{area.name}</option>)}</select></div>
               </div>
               {ordersPeriodPreset==="custom"&&<div className="ordersFilterGrid">
                 <div><label className="ordersFieldLabel" htmlFor="orders-start-date">Data inicial</label><input id="orders-start-date" className="ordersDateInput" type="date" value={ordersStartDate} onChange={e=>setOrdersStartDate(e.target.value)} max={ordersEndDate||undefined}/></div>
