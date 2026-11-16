@@ -143,6 +143,7 @@ export default function Home() {
   const [materialOrders,setMaterialOrders] = useState<MaterialOrder[]>([]);
   const [ordersStartDate,setOrdersStartDate] = useState("");
   const [ordersEndDate,setOrdersEndDate] = useState("");
+  const [ordersPeriodPreset,setOrdersPeriodPreset] = useState<"all"|"month"|"last30"|"last90"|"year"|"custom">("all");
   const [materialOrderItems,setMaterialOrderItems] = useState<MaterialOrderItem[]>([]);
   const [materialOrderHistory,setMaterialOrderHistory] = useState<MaterialOrderHistory[]>([]);
   const [ordersLoading,setOrdersLoading] = useState(false);
@@ -861,6 +862,21 @@ export default function Home() {
     cancelado:"Cancelado"
   };
   const orderCreatedDate = (createdAt:string) => { const date=new Date(createdAt); const year=date.getFullYear(); const month=String(date.getMonth()+1).padStart(2,"0"); const day=String(date.getDate()).padStart(2,"0"); return `${year}-${month}-${day}`; };
+  const orderDateInputValue = (date:Date) => `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
+  const applyOrdersPeriod = (preset:"all"|"month"|"last30"|"last90"|"year"|"custom") => {
+    setOrdersPeriodPreset(preset);
+    const today = new Date();
+    const end = orderDateInputValue(today);
+    if (preset==="all") { setOrdersStartDate(""); setOrdersEndDate(""); return; }
+    if (preset==="custom") return;
+    let startDate = new Date(today.getFullYear(),today.getMonth(),today.getDate());
+    if (preset==="month") startDate = new Date(today.getFullYear(),today.getMonth(),1);
+    if (preset==="last30") startDate.setDate(startDate.getDate()-29);
+    if (preset==="last90") startDate.setDate(startDate.getDate()-89);
+    if (preset==="year") startDate = new Date(today.getFullYear(),0,1);
+    setOrdersStartDate(orderDateInputValue(startDate));
+    setOrdersEndDate(end);
+  };
   const ordersDateRangeInvalid = Boolean(ordersStartDate && ordersEndDate && ordersStartDate>ordersEndDate);
   const filteredMaterialOrders = ordersDateRangeInvalid ? [] : materialOrders.filter(order=>{const date=orderCreatedDate(order.created_at);return (!ordersStartDate||date>=ordersStartDate)&&(!ordersEndDate||date<=ordersEndDate);});
   const selectedOrder = materialOrders.find(order=>order.id===selectedMaterialOrder) || null;
@@ -1326,6 +1342,11 @@ export default function Home() {
              .ordersFieldLabel{display:block;margin:0 0 9px;color:#565568;font-size:11px;font-weight:700;letter-spacing:.035em;text-transform:uppercase}
              .ordersDateInput{width:100%;height:43px;box-sizing:border-box;border:1px solid #e1e2ea;border-radius:10px;background:#fff;padding:0 12px;color:#292837;font-size:13px;font-weight:500;font-family:inherit;outline:none;transition:border-color .15s,box-shadow .15s}
              .ordersDateInput:focus{border-color:#9b5cdb;box-shadow:0 0 0 3px rgba(122,27,216,.10)}
+             .ordersPeriodLabel{margin:0 0 12px;color:#565568;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+             .ordersPresetRow{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+             .ordersPresetButton{height:39px;padding:0 14px;border:1px solid #e1e2ea;border-radius:10px;background:#fff;color:#55536a;font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;transition:all .15s}
+             .ordersPresetButton:hover{border-color:#b98be8;color:#7624c7}
+             .ordersPresetButton.active{border-color:#8b24e8;background:#f5edff;color:#7624c7;box-shadow:0 0 0 1px rgba(122,27,216,.08)}
              .ordersFilterBottom{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:18px;padding-top:14px;border-top:1px solid #f0edf4;flex-wrap:wrap;color:#777487;font-size:12px}
              .ordersFilterBottom strong{color:#4b3a60;font-weight:700}
              .ordersFilterClear{border:0;background:transparent;color:#7624c7;font-size:12px;font-weight:700;padding:9px 10px;border-radius:8px;cursor:pointer;white-space:nowrap}
@@ -1333,14 +1354,20 @@ export default function Home() {
              @media(max-width:560px){.ordersFilterCard{padding:18px}.ordersFilterGrid{grid-template-columns:1fr;gap:16px}.ordersFilterTop{margin-bottom:17px}}
            `}</style>
            <section className="panel ordersFilterCard">
-             <div className="ordersFilterTop"><div className="ordersFilterTitle"><span className="ordersFilterIcon"><CalendarDays size={19}/></span><div><h3>Filtrar por período</h3><p>Consulte os pedidos pela data em que foram solicitados.</p></div></div>
-               {(ordersStartDate||ordersEndDate)&&<button type="button" className="ordersFilterClear" onClick={()=>{setOrdersStartDate("");setOrdersEndDate("")}}>Limpar filtros</button>}
-             </div>
-             <div className="ordersFilterGrid">
-               <div><label className="ordersFieldLabel" htmlFor="orders-start-date">Data inicial</label><input id="orders-start-date" className="ordersDateInput" type="date" value={ordersStartDate} onChange={e=>setOrdersStartDate(e.target.value)} max={ordersEndDate||undefined}/></div>
-               <div><label className="ordersFieldLabel" htmlFor="orders-end-date">Data final</label><input id="orders-end-date" className="ordersDateInput" type="date" value={ordersEndDate} onChange={e=>setOrdersEndDate(e.target.value)} min={ordersStartDate||undefined}/></div>
-             </div>
-             <div className="ordersFilterBottom"><span>{ordersDateRangeInvalid?<strong style={{color:"#b42318"}}>A data inicial não pode ser posterior à data final.</strong>:<>Exibindo <strong>{filteredMaterialOrders.length}</strong> de <strong>{materialOrders.length}</strong> pedido(s).</>}</span></div>
+             <div className="ordersFilterTop"><div className="ordersFilterTitle"><span className="ordersFilterIcon"><CalendarDays size={19}/></span><div><h3>Filtrar por período</h3><p>Consulte os pedidos pela data em que foram solicitados.</p></div></div></div>
+              <p className="ordersPeriodLabel">Período de análise</p>
+              <div className="ordersPresetRow">
+                <button type="button" className={`ordersPresetButton ${ordersPeriodPreset==="all"?"active":""}`} onClick={()=>applyOrdersPeriod("all")}>Todo o período</button>
+                <button type="button" className={`ordersPresetButton ${ordersPeriodPreset==="month"?"active":""}`} onClick={()=>applyOrdersPeriod("month")}>Este mês</button>
+                <button type="button" className={`ordersPresetButton ${ordersPeriodPreset==="last30"?"active":""}`} onClick={()=>applyOrdersPeriod("last30")}>Últimos 30 dias</button>
+                <button type="button" className={`ordersPresetButton ${ordersPeriodPreset==="last90"?"active":""}`} onClick={()=>applyOrdersPeriod("last90")}>Últimos 90 dias</button>
+                <button type="button" className={`ordersPresetButton ${ordersPeriodPreset==="year"?"active":""}`} onClick={()=>applyOrdersPeriod("year")}>Este ano</button>
+                <button type="button" className={`ordersPresetButton ${ordersPeriodPreset==="custom"?"active":""}`} onClick={()=>applyOrdersPeriod("custom")}>Personalizado</button>
+              </div>
+              {ordersPeriodPreset==="custom"&&<div className="ordersFilterGrid">
+                <div><label className="ordersFieldLabel" htmlFor="orders-start-date">Data inicial</label><input id="orders-start-date" className="ordersDateInput" type="date" value={ordersStartDate} onChange={e=>setOrdersStartDate(e.target.value)} max={ordersEndDate||undefined}/></div>
+                <div><label className="ordersFieldLabel" htmlFor="orders-end-date">Data final</label><input id="orders-end-date" className="ordersDateInput" type="date" value={ordersEndDate} onChange={e=>setOrdersEndDate(e.target.value)} min={ordersStartDate||undefined}/></div>
+              </div>}<div className="ordersFilterBottom"><span>{ordersDateRangeInvalid?<strong style={{color:"#b42318"}}>A data inicial não pode ser posterior à data final.</strong>:<>Exibindo <strong>{filteredMaterialOrders.length}</strong> de <strong>{materialOrders.length}</strong> pedido(s).</>}</span></div>
            </section>
           <div className="stats"><Stat icon={<ClipboardList/>} label="Pedidos visíveis" value={filteredMaterialOrders.length} tone="blue"/><Stat icon={<Clock3/>} label="Aguardando gestor" value={pendingManagerOrders} tone="violet"/><Stat icon={<PackageCheck/>} label="Aguardando estoque" value={pendingStockOrders} tone="amber"/><Stat icon={<Layers/>} label="Em atendimento" value={activeMaterialOrders} tone="green"/></div>
           <div className="panel"><div className="panelHead"><div><h3>Pedidos cadastrados</h3><p>Os pedidos exibidos respeitam as permissões de acesso do seu perfil.</p></div><span className="muted">{filteredMaterialOrders.length} registro(s)</span></div>
