@@ -141,6 +141,8 @@ export default function Home() {
   const [materialForm,setMaterialForm] = useState({name:"",sku:"",description:"",unit:"un",minimum_quantity:"0"});
   const [movementForm,setMovementForm] = useState({material_id:"",movement_type:"entrada" as StockMovement["movement_type"],quantity:"",request_id:"",notes:""});
   const [materialOrders,setMaterialOrders] = useState<MaterialOrder[]>([]);
+  const [ordersStartDate,setOrdersStartDate] = useState("");
+  const [ordersEndDate,setOrdersEndDate] = useState("");
   const [materialOrderItems,setMaterialOrderItems] = useState<MaterialOrderItem[]>([]);
   const [materialOrderHistory,setMaterialOrderHistory] = useState<MaterialOrderHistory[]>([]);
   const [ordersLoading,setOrdersLoading] = useState(false);
@@ -532,7 +534,7 @@ export default function Home() {
   useEffect(() => { setDeleteConfirm(false); setCompleteConfirm(false); setListPage("comments",1); }, [selected?.id]);
   useEffect(() => { setListPage("orderItems",1); setListPage("orderHistory",1); },[selectedMaterialOrder]);
   useEffect(() => { setListPage("memberTasks",1); },[selectedMember?.id]);
-  useEffect(() => { setListPagination(old=>Object.fromEntries(Object.entries(old).map(([key,value])=>[key,{...value,page:1}]))); },[search,requestUserFilter,scheduleOwnerFilter,scheduleAreaFilter,scheduleStatusFilter,schedulePeriod,scheduleStartDate,scheduleEndDate,stockSearch,stockReportMaterial,stockReportType,stockReportStart,stockReportEnd,reportDateMode,reportPeriod,reportStartDate,reportEndDate,reportAreaFilter,reportOwnerFilter,reportStatusFilter,auditSearch,auditActorFilter,auditModuleFilter,auditActionFilter,auditStartDate,auditEndDate,memberTaskStatus]);
+  useEffect(() => { setListPagination(old=>Object.fromEntries(Object.entries(old).map(([key,value])=>[key,{...value,page:1}]))); },[search,requestUserFilter,scheduleOwnerFilter,scheduleAreaFilter,scheduleStatusFilter,schedulePeriod,scheduleStartDate,scheduleEndDate,stockSearch,stockReportMaterial,stockReportType,stockReportStart,stockReportEnd,reportDateMode,reportPeriod,reportStartDate,reportEndDate,reportAreaFilter,reportOwnerFilter,reportStatusFilter,auditSearch,auditActorFilter,auditModuleFilter,auditActionFilter,auditStartDate,auditEndDate,memberTaskStatus,ordersStartDate,ordersEndDate]);
   useEffect(() => { if (areas.length && !form.areaId) setForm(old=>({...old,areaId:areas[0].id})); },[areas,form.areaId]);
 
   useEffect(() => {
@@ -858,13 +860,16 @@ export default function Home() {
     rejeitado_estoque:"Rejeitado pelo estoque",
     cancelado:"Cancelado"
   };
+  const orderCreatedDate = (createdAt:string) => { const date=new Date(createdAt); const year=date.getFullYear(); const month=String(date.getMonth()+1).padStart(2,"0"); const day=String(date.getDate()).padStart(2,"0"); return `${year}-${month}-${day}`; };
+  const ordersDateRangeInvalid = Boolean(ordersStartDate && ordersEndDate && ordersStartDate>ordersEndDate);
+  const filteredMaterialOrders = ordersDateRangeInvalid ? [] : materialOrders.filter(order=>{const date=orderCreatedDate(order.created_at);return (!ordersStartDate||date>=ordersStartDate)&&(!ordersEndDate||date<=ordersEndDate);});
   const selectedOrder = materialOrders.find(order=>order.id===selectedMaterialOrder) || null;
   const unreadNotificationCount = notifications.filter(item=>!item.is_read).length;
   const selectedOrderItems = materialOrderItems.filter(item=>item.order_id===selectedMaterialOrder);
   const selectedOrderHistory = materialOrderHistory.filter(item=>item.order_id===selectedMaterialOrder);
-  const pendingManagerOrders = materialOrders.filter(order=>order.status==="aguardando_aprovacao_gestor").length;
-  const pendingStockOrders = materialOrders.filter(order=>order.status==="aguardando_aprovacao_estoque").length;
-  const activeMaterialOrders = materialOrders.filter(order=>["em_separacao","aguardando_retirada"].includes(order.status)).length;
+  const pendingManagerOrders = filteredMaterialOrders.filter(order=>order.status==="aguardando_aprovacao_gestor").length;
+  const pendingStockOrders = filteredMaterialOrders.filter(order=>order.status==="aguardando_aprovacao_estoque").length;
+  const activeMaterialOrders = filteredMaterialOrders.filter(order=>["em_separacao","aguardando_retirada"].includes(order.status)).length;
 
   async function createMaterialOrder() {
     if (!supabase || !profile) return;
@@ -1310,9 +1315,36 @@ export default function Home() {
         {active==="Pedidos de Materiais" && <>
           <div className="pageHeading"><div><p className="eyebrow">SUPRIMENTOS INTERNOS</p><h1>Pedidos de Materiais</h1><p className="sub">Solicite materiais, acompanhe aprovações e consulte a separação e entrega.</p></div><div style={{display:"flex",gap:10,flexWrap:"wrap"}}><button className="secondary" onClick={loadMaterialOrders} disabled={ordersLoading}><RefreshCw size={15}/> Atualizar</button><button className="primary" onClick={()=>{setOrdersError("");setOrderAreaId(myOrderAreas.some(a=>a.id===profile?.area_id)?profile?.area_id||"":myOrderAreas[0]?.id||"");setShowNewMaterialOrder(true)}} disabled={!myOrderAreas.length}><Plus size={16}/> Novo pedido</button></div></div>
           {ordersError&&<div className="errorBanner"><span>{ordersError}</span><button onClick={()=>setOrdersError("")}>Fechar</button></div>}
-          <div className="stats"><Stat icon={<ClipboardList/>} label="Pedidos visíveis" value={materialOrders.length} tone="blue"/><Stat icon={<Clock3/>} label="Aguardando gestor" value={pendingManagerOrders} tone="violet"/><Stat icon={<PackageCheck/>} label="Aguardando estoque" value={pendingStockOrders} tone="amber"/><Stat icon={<Layers/>} label="Em atendimento" value={activeMaterialOrders} tone="green"/></div>
-          <div className="panel"><div className="panelHead"><div><h3>Pedidos cadastrados</h3><p>Os pedidos exibidos respeitam as permissões de acesso do seu perfil.</p></div><span className="muted">{materialOrders.length} registro(s)</span></div>
-            {ordersLoading?<div className="emptyTable">Carregando pedidos de materiais...</div>:!materialOrders.length?<div className="emptyTable">Nenhum pedido de materiais encontrado. Use “Novo pedido” para registrar a primeira solicitação.</div>:<div className="tableWrap"><table><thead><tr><th>Pedido</th><th>Solicitante / Área</th><th>Necessário em</th><th>Materiais</th><th>Status</th><th style={{textAlign:"right"}}>Ação</th></tr></thead><tbody>{pageItems("orders",materialOrders).map(order=>{const count=materialOrderItems.filter(item=>item.order_id===order.id).length;return <tr key={order.id}><td><div style={{display:"flex",flexDirection:"column",gap:3}}><b style={{whiteSpace:"nowrap"}}>#{order.protocol}</b><span className="muted" style={{fontSize:12}}>{new Date(order.created_at).toLocaleDateString("pt-BR")}</span></div></td><td><div style={{display:"flex",flexDirection:"column",gap:3,minWidth:130}}><b>{orderRequesterName(order.requester_id)}</b><span className="muted" style={{fontSize:12}}>{orderAreaName(order.area_id)}</span></div></td><td style={{whiteSpace:"nowrap"}}>{order.needed_by?new Date(order.needed_by+"T12:00:00").toLocaleDateString("pt-BR"):"—"}</td><td><span style={{display:"inline-flex",alignItems:"center",justifyContent:"center",minWidth:28,padding:"4px 9px",borderRadius:20,background:"var(--surface-soft,#f4f2f8)",fontSize:12,fontWeight:700}}>{count}</span><span className="muted" style={{fontSize:12,marginLeft:7}}>{count===1?"material":"materiais"}</span></td><td><span className={`status ${order.status==="concluido"?"green":order.status.startsWith("rejeitado")||order.status==="cancelado"?"red":order.status.includes("aguardando")?"amber":"blue"}`}>{orderStatusLabels[order.status]}</span></td><td style={{textAlign:"right"}}><button className="textButton" style={{whiteSpace:"nowrap"}} onClick={()=>setSelectedMaterialOrder(order.id)}>Ver detalhes <ArrowUpRight size={14}/></button></td></tr>})}</tbody></table></div>}<Pagination {...paginationProps("orders",materialOrders.length)}/>
+          <style>{`
+             .ordersFilterCard{padding:22px 24px;margin-bottom:18px;border:1px solid #e7e8ef;background:linear-gradient(135deg,#fff 0%,#fcfbff 100%);box-shadow:0 5px 18px rgba(31,24,55,.035)}
+             .ordersFilterTop{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:18px}
+             .ordersFilterTitle{display:flex;align-items:center;gap:11px}
+             .ordersFilterIcon{width:38px;height:38px;display:grid;place-items:center;border-radius:12px;background:#f2eaff;color:#7a1bd8;flex:none}
+             .ordersFilterTitle h3{margin:0 0 4px;font-size:15px;font-weight:700;color:#20202b}
+             .ordersFilterTitle p{margin:0;font-size:12px;color:#858397}
+             .ordersFilterGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;align-items:start}
+             .ordersFieldLabel{display:block;margin:0 0 9px;color:#565568;font-size:11px;font-weight:700;letter-spacing:.035em;text-transform:uppercase}
+             .ordersDateInput{width:100%;height:43px;box-sizing:border-box;border:1px solid #e1e2ea;border-radius:10px;background:#fff;padding:0 12px;color:#292837;font-size:13px;font-weight:500;font-family:inherit;outline:none;transition:border-color .15s,box-shadow .15s}
+             .ordersDateInput:focus{border-color:#9b5cdb;box-shadow:0 0 0 3px rgba(122,27,216,.10)}
+             .ordersFilterBottom{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:18px;padding-top:14px;border-top:1px solid #f0edf4;flex-wrap:wrap;color:#777487;font-size:12px}
+             .ordersFilterBottom strong{color:#4b3a60;font-weight:700}
+             .ordersFilterClear{border:0;background:transparent;color:#7624c7;font-size:12px;font-weight:700;padding:9px 10px;border-radius:8px;cursor:pointer;white-space:nowrap}
+             .ordersFilterClear:hover{background:#f5edff}
+             @media(max-width:560px){.ordersFilterCard{padding:18px}.ordersFilterGrid{grid-template-columns:1fr;gap:16px}.ordersFilterTop{margin-bottom:17px}}
+           `}</style>
+           <section className="panel ordersFilterCard">
+             <div className="ordersFilterTop"><div className="ordersFilterTitle"><span className="ordersFilterIcon"><CalendarDays size={19}/></span><div><h3>Filtrar por período</h3><p>Consulte os pedidos pela data em que foram solicitados.</p></div></div>
+               {(ordersStartDate||ordersEndDate)&&<button type="button" className="ordersFilterClear" onClick={()=>{setOrdersStartDate("");setOrdersEndDate("")}}>Limpar filtros</button>}
+             </div>
+             <div className="ordersFilterGrid">
+               <div><label className="ordersFieldLabel" htmlFor="orders-start-date">Data inicial</label><input id="orders-start-date" className="ordersDateInput" type="date" value={ordersStartDate} onChange={e=>setOrdersStartDate(e.target.value)} max={ordersEndDate||undefined}/></div>
+               <div><label className="ordersFieldLabel" htmlFor="orders-end-date">Data final</label><input id="orders-end-date" className="ordersDateInput" type="date" value={ordersEndDate} onChange={e=>setOrdersEndDate(e.target.value)} min={ordersStartDate||undefined}/></div>
+             </div>
+             <div className="ordersFilterBottom"><span>{ordersDateRangeInvalid?<strong style={{color:"#b42318"}}>A data inicial não pode ser posterior à data final.</strong>:<>Exibindo <strong>{filteredMaterialOrders.length}</strong> de <strong>{materialOrders.length}</strong> pedido(s).</>}</span></div>
+           </section>
+          <div className="stats"><Stat icon={<ClipboardList/>} label="Pedidos visíveis" value={filteredMaterialOrders.length} tone="blue"/><Stat icon={<Clock3/>} label="Aguardando gestor" value={pendingManagerOrders} tone="violet"/><Stat icon={<PackageCheck/>} label="Aguardando estoque" value={pendingStockOrders} tone="amber"/><Stat icon={<Layers/>} label="Em atendimento" value={activeMaterialOrders} tone="green"/></div>
+          <div className="panel"><div className="panelHead"><div><h3>Pedidos cadastrados</h3><p>Os pedidos exibidos respeitam as permissões de acesso do seu perfil.</p></div><span className="muted">{filteredMaterialOrders.length} registro(s)</span></div>
+            {ordersLoading?<div className="emptyTable">Carregando pedidos de materiais...</div>:!materialOrders.length?<div className="emptyTable">Nenhum pedido de materiais encontrado. Use “Novo pedido” para registrar a primeira solicitação.</div>:ordersDateRangeInvalid?<div className="emptyTable">Ajuste o período informado para consultar os pedidos.</div>:!filteredMaterialOrders.length?<div className="emptyTable">Nenhum pedido encontrado no período selecionado.</div>:<div className="tableWrap"><table><thead><tr><th>Pedido</th><th>Solicitante / Área</th><th>Necessário em</th><th>Materiais</th><th>Status</th><th style={{textAlign:"right"}}>Ação</th></tr></thead><tbody>{pageItems("orders",filteredMaterialOrders).map(order=>{const count=materialOrderItems.filter(item=>item.order_id===order.id).length;return <tr key={order.id}><td><div style={{display:"flex",flexDirection:"column",gap:3}}><b style={{whiteSpace:"nowrap"}}>#{order.protocol}</b><span className="muted" style={{fontSize:12}}>{new Date(order.created_at).toLocaleDateString("pt-BR")}</span></div></td><td><div style={{display:"flex",flexDirection:"column",gap:3,minWidth:130}}><b>{orderRequesterName(order.requester_id)}</b><span className="muted" style={{fontSize:12}}>{orderAreaName(order.area_id)}</span></div></td><td style={{whiteSpace:"nowrap"}}>{order.needed_by?new Date(order.needed_by+"T12:00:00").toLocaleDateString("pt-BR"):"—"}</td><td><span style={{display:"inline-flex",alignItems:"center",justifyContent:"center",minWidth:28,padding:"4px 9px",borderRadius:20,background:"var(--surface-soft,#f4f2f8)",fontSize:12,fontWeight:700}}>{count}</span><span className="muted" style={{fontSize:12,marginLeft:7}}>{count===1?"material":"materiais"}</span></td><td><span className={`status ${order.status==="concluido"?"green":order.status.startsWith("rejeitado")||order.status==="cancelado"?"red":order.status.includes("aguardando")?"amber":"blue"}`}>{orderStatusLabels[order.status]}</span></td><td style={{textAlign:"right"}}><button className="textButton" style={{whiteSpace:"nowrap"}} onClick={()=>setSelectedMaterialOrder(order.id)}>Ver detalhes <ArrowUpRight size={14}/></button></td></tr>})}</tbody></table></div>}<Pagination {...paginationProps("orders",filteredMaterialOrders.length)}/>
           </div>
           {selectedOrder&&<div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setSelectedMaterialOrder(null)}}>
             <div className="modal" style={{width:"min(820px,100%)",maxWidth:820,maxHeight:"90vh",padding:26,overflowY:"auto"}}>
