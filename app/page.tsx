@@ -14,7 +14,8 @@ type Status = "Recebida" | "Em análise" | "Aguardando aprovação" | "Em execu�
 type Priority = "Baixa" | "Média" | "Alta" | "Urgente";
 type Area = { id: string; name: string };
 type Profile = { id: string; full_name: string; email: string | null; role: "admin" | "gestor" | "colaborador"; area_id: string | null; area_ids?: string[]; active: boolean; stock_manager: boolean };
-type Task = { id: string; protocol: number; title: string; area: string; areaId: string; owner: string; requester: string; requesterId: string; priority: Priority; status: Status; due: string; created: string; completedAt: string | null; description: string; ownerId: string | null };
+type AreaAssignment = { areaId:string; area:string; ownerId:string; owner:string; status:Status; isPrimary:boolean; completedAt:string|null };
+type Task = { id: string; protocol: number; title: string; area: string; areaId: string; owner: string; requester: string; requesterId: string; priority: Priority; status: Status; due: string; created: string; completedAt: string | null; description: string; ownerId: string | null; areaAssignments:AreaAssignment[] };
 type AreaMember = { profile_id: string; full_name: string };
 type RequestComment = { id: string; request_id: string; author_id: string; body: string; created_at: string; author_name: string };
 type Material = {
@@ -66,6 +67,9 @@ export default function Home() {
   const [members,setMembers] = useState<Profile[]>([]);
   const [areaMembers,setAreaMembers] = useState<AreaMember[]>([]);
   const [selectedAreaMembers,setSelectedAreaMembers] = useState<AreaMember[]>([]);
+  const [formAreaIds,setFormAreaIds] = useState<string[]>([]);
+  const [formOwners,setFormOwners] = useState<Record<string,string>>({});
+  const [formMembersByArea,setFormMembersByArea] = useState<Record<string,AreaMember[]>>({});
   const [dataLoading,setDataLoading] = useState(false);
   const [dataError,setDataError] = useState("");
   const [active,setActive] = useState("Dashboard");
@@ -204,7 +208,7 @@ export default function Home() {
       const p = profileResult.data as Profile;
       const [areaResult, requestResult, memberResult, profileAreasResult] = await Promise.all([
         supabase.from("areas").select("id,name").eq("active",true).order("name"),
-        supabase.from("requests").select("id,protocol,title,description,area_id,requester_id,owner_id,priority,status,due_date,created_at,completed_at,deleted_at, area:areas!requests_area_id_fkey(name), owner:profiles!requests_owner_id_fkey(full_name), requester:profiles!requests_requester_id_fkey(full_name)").is("deleted_at",null).order("created_at",{ascending:false}),
+        supabase.from("requests").select("id,protocol,title,description,area_id,requester_id,owner_id,priority,status,due_date,created_at,completed_at,deleted_at, area:areas!requests_area_id_fkey(name), owner:profiles!requests_owner_id_fkey(full_name), requester:profiles!requests_requester_id_fkey(full_name), request_areas(area_id,owner_id,status,is_primary,completed_at,area:areas(name),owner:profiles(full_name))").is("deleted_at",null).order("created_at",{ascending:false}),
         supabase.from("profiles").select("id,full_name,email,role,area_id,active,stock_manager").order("full_name"),
         supabase.from("profile_areas").select("profile_id,area_id")
       ]);
@@ -217,12 +221,11 @@ export default function Home() {
       setProfile({...p, area_ids: idsForProfile(p.id)});
       setAreas((areaResult.data||[]) as Area[]);
       setMembers(((memberResult.data||[]) as Profile[]).map(member => ({...member, area_ids: idsForProfile(member.id)})));
-      const mapped = (requestResult.data||[]).map((r:any):Task => ({
-        id:r.id, protocol:Number(r.protocol), title:r.title, area:r.area?.name||"Área não definida", areaId:r.area_id,
-        owner:r.owner?.full_name||"Não atribuído", ownerId:r.owner_id, requester:r.requester?.full_name||"Solicitante", requesterId:r.requester_id,
-        priority:dbToPriority[r.priority]||"Média", status:dbToStatus[r.status]||"Recebida",
-        due:r.due_date, created:r.created_at?.slice(0,10)||"", completedAt:r.completed_at||null, description:r.description||""
-      }));
+      const mapped = (requestResult.data||[]).map((r:any):Task => {
+        const assignments:AreaAssignment[] = (r.request_areas||[]).map((ra:any)=>({areaId:ra.area_id,area:ra.area?.name||"Área não definida",ownerId:ra.owner_id,owner:ra.owner?.full_name||"Não atribuído",status:dbToStatus[ra.status]||"Recebida",isPrimary:!!ra.is_primary,completedAt:ra.completed_at||null}));
+        const primary=assignments.find(a=>a.isPrimary);
+        return {id:r.id,protocol:Number(r.protocol),title:r.title,area:primary?.area||r.area?.name||"Área não definida",areaId:primary?.areaId||r.area_id,owner:primary?.owner||r.owner?.full_name||"Não atribuído",ownerId:primary?.ownerId||r.owner_id,requester:r.requester?.full_name||"Solicitante",requesterId:r.requester_id,priority:dbToPriority[r.priority]||"Média",status:dbToStatus[r.status]||"Recebida",due:r.due_date,created:r.created_at?.slice(0,10)||"",completedAt:r.completed_at||null,description:r.description||"",areaAssignments:assignments};
+      });
       setTasks(mapped);
     } catch (error:any) {
       setDataError(error.message || "Não foi possível carregar os dados do Supabase.");
@@ -588,6 +591,11 @@ export default function Home() {
     return () => { active = false; };
   }, [selected?.areaId, isManager]);
 
+  useEffect(() => {
+    if (!showNew) return;
+    setFormAreaIds(old=>old.length?old:(form.areaId?[form.areaId]:[]));
+  },[showNew]);
+
   async function signIn(e:FormEvent) {
     e.preventDefault(); if (!supabase) return;
     setLoginLoading(true); setLoginError("");
@@ -660,7 +668,7 @@ export default function Home() {
     return {start:"",end:""};
   },[reportPeriod,reportStartDate,reportEndDate]);
   const reportTasks = useMemo(() => tasks.filter(task => {
-    if (reportAreaFilter !== "Todas" && task.areaId !== reportAreaFilter) return false;
+    if (reportAreaFilter !== "Todas" && !task.areaAssignments.some(a=>a.areaId===reportAreaFilter)) return false;
     if (reportOwnerFilter === "Sem responsável" && task.ownerId) return false;
     if (reportOwnerFilter !== "Todos" && reportOwnerFilter !== "Sem responsável" && task.ownerId !== reportOwnerFilter) return false;
     if (reportStatusFilter !== "Todos" && task.status !== reportStatusFilter) return false;
@@ -746,7 +754,7 @@ export default function Home() {
   const scheduleTasks = useMemo(() => tasks.filter(task => {
     if (scheduleOwnerFilter === "Sem responsável" && task.ownerId) return false;
     if (scheduleOwnerFilter !== "Todos" && scheduleOwnerFilter !== "Sem responsável" && task.ownerId !== scheduleOwnerFilter) return false;
-    if (scheduleAreaFilter !== "Todas" && task.areaId !== scheduleAreaFilter) return false;
+    if (scheduleAreaFilter !== "Todas" && !task.areaAssignments.some(a=>a.areaId===scheduleAreaFilter)) return false;
     if (scheduleStatusFilter !== "Todos" && task.status !== scheduleStatusFilter) return false;
     if (schedulePeriod === "overdue") return task.status !== "Concluída" && task.status !== "Cancelada" && !!task.due && task.due < scheduleToday;
     if (schedulePeriod === "custom") {
@@ -765,7 +773,7 @@ export default function Home() {
   const scheduleOverdueCount = tasks.filter(t=>t.status!=="Concluída"&&t.status!=="Cancelada"&&t.due&&t.due<scheduleToday).length;
   const scheduleTodayCount = tasks.filter(t=>t.status!=="Concluída"&&t.status!=="Cancelada"&&t.due===scheduleToday).length;
   const scheduleNextSevenCount = tasks.filter(t=>t.status!=="Concluída"&&t.status!=="Cancelada"&&t.due&&t.due>=scheduleToday&&t.due<=(()=>{const d=new Date();d.setDate(d.getDate()+7);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`})()).length;
-  const selectedMemberTasks = useMemo(() => selectedMember ? tasks.filter(t => t.ownerId === selectedMember.id) : [], [tasks, selectedMember]);
+  const selectedMemberTasks = useMemo(() => selectedMember ? tasks.filter(t => t.areaAssignments.some(a=>a.ownerId===selectedMember.id)) : [], [tasks, selectedMember]);
   const visibleMemberTasks = useMemo(() => memberTaskStatus === "Todas" ? selectedMemberTasks : selectedMemberTasks.filter(t => t.status === memberTaskStatus), [selectedMemberTasks, memberTaskStatus]);
   const memberTasksLate = selectedMemberTasks.filter(t => t.status !== "Concluída" && t.status !== "Cancelada" && t.due && new Date(t.due + "T23:59:00") < new Date()).length;
   const memberTasksInProgress = selectedMemberTasks.filter(t => t.status === "Em execução" || t.status === "Em análise" || t.status === "Aguardando aprovação").length;
@@ -932,41 +940,26 @@ export default function Home() {
     setOrdersSaving(false);
   }
 
-  async function createTask() {
-    if (!supabase || !profile || !form.title.trim() || !form.due || !form.areaId) return;
-    if (areaMembers.length === 0) {
-      setDataError("A área selecionada não possui responsáveis ativos.");
-      return;
-    }
-    if (areaMembers.length > 1 && !form.ownerId) {
-      setDataError("Selecione o responsável pela solicitação.");
-      return;
-    }
-    if (form.ownerId && !areaMembers.some(member => member.profile_id === form.ownerId)) {
-      setDataError("O responsável selecionado não pertence à área escolhida.");
-      return;
-    }
+  async function toggleFormArea(areaId:string, checked:boolean) {
+    if (!supabase) return;
+    if (!checked) { setFormAreaIds(old=>old.filter(id=>id!==areaId)); setFormOwners(old=>{const next={...old};delete next[areaId];return next;}); setFormMembersByArea(old=>{const next={...old};delete next[areaId];return next;}); return; }
+    setFormAreaIds(old=>old.includes(areaId)?old:[...old,areaId]);
+    const {data,error}=await supabase.rpc("get_area_members",{target_area:areaId});
+    if(error){setDataError(error.message);return;}
+    setFormMembersByArea(old=>({...old,[areaId]:(data||[]) as AreaMember[]}));
+    if((data||[]).length===1)setFormOwners(old=>({...old,[areaId]:(data as AreaMember[])[0].profile_id}));
+  }
 
-    setSaving(true);
-    setDataError("");
-    const payload = {
-      title: form.title.trim(),
-      description: form.description.trim() || null,
-      area_id: form.areaId,
-      requester_id: profile.id,
-      owner_id: form.ownerId || null,
-      priority: priorityToDb[form.priority] as any,
-      status: "recebida",
-      due_date: form.due
-    };
-    const { error } = await supabase.from("requests").insert(payload);
-    if (error) {
-      setDataError(error.message);
-    } else {
-      setShowNew(false);
-      setForm(old => ({ ...old, title: "", ownerId: "", priority: "Média", due: "", description: "" }));
-      if (session?.user) await loadData(session.user);
-    }
+  async function createTask() {
+    if (!supabase || !profile || !form.title.trim() || !form.due || !formAreaIds.length) return;
+    const missingArea=formAreaIds.find(id=>!(formMembersByArea[id]||[]).length);
+    if(missingArea){setDataError(`A área ${areas.find(a=>a.id===missingArea)?.name||""} não possui responsáveis ativos.`);return;}
+    const ownerIds=formAreaIds.map(id=>formOwners[id]||((formMembersByArea[id]||[]).length===1?formMembersByArea[id][0].profile_id:""));
+    if(ownerIds.some(id=>!id)){setDataError("Selecione um responsável para cada área.");return;}
+    if(ownerIds.some((id,index)=>!(formMembersByArea[formAreaIds[index]]||[]).some(m=>m.profile_id===id))){setDataError("Há responsável que não pertence à área selecionada.");return;}
+    setSaving(true);setDataError("");
+    const {error}=await supabase.rpc("create_request_with_areas",{p_title:form.title.trim(),p_description:form.description.trim()||null,p_area_ids:formAreaIds,p_owner_ids:ownerIds,p_priority:priorityToDb[form.priority],p_due_date:form.due});
+    if(error)setDataError(error.message);else{setShowNew(false);setForm({title:"",areaId:"",ownerId:"",priority:"Média",due:"",description:""});setFormAreaIds([]);setFormOwners({});setFormMembersByArea({});if(session?.user)await loadData(session.user);}
     setSaving(false);
   }
   function openNewMaterial() {
@@ -1186,32 +1179,17 @@ export default function Home() {
 
   async function updateTask(task:Task, patch:Partial<Task>) {
     if (!supabase || !profile) return;
+    if ((patch.priority !== undefined || patch.ownerId !== undefined) && !isManager) { setDataError("Somente gestores e administradores podem alterar a prioridade ou o responsável."); return; }
+    const update:any={}; if(patch.priority&&isManager)update.priority=priorityToDb[patch.priority];
+    if(Object.keys(update).length){const {error}=await supabase.from("requests").update(update).eq("id",task.id);if(error){setDataError(error.message);return;}}
+    setPendingTaskUpdate(null);setSelected(null);if(session?.user)await loadData(session.user);
+  }
 
-    const canUpdateStatus = isManager || (task.ownerId === profile.id && task.requesterId !== profile.id);
-    if (patch.status && !canUpdateStatus) {
-      setDataError("Somente o responsável pela demanda ou um gestor pode alterar o status. O solicitante não pode alterar o status da própria solicitação.");
-      return;
-    }
-    if ((patch.priority !== undefined || patch.ownerId !== undefined) && !isManager) {
-      setDataError("Somente gestores e administradores podem alterar a prioridade ou o responsável.");
-      return;
-    }
-
-    const update:any = {};
-    if (patch.status) update.status = statusToDb[patch.status];
-    if (patch.priority && isManager) update.priority = priorityToDb[patch.priority];
-    if (patch.ownerId !== undefined && isManager) update.owner_id = patch.ownerId;
-    if (!Object.keys(update).length) return;
-
-    setDataError("");
-    const {error} = await supabase.from("requests").update(update).eq("id",task.id);
-    if (error) {
-      setDataError(error.message);
-    } else {
-      setPendingTaskUpdate(null);
-      setSelected(null);
-      if(session?.user) await loadData(session.user);
-    }
+  async function updateAreaStatus(task:Task, assignment:AreaAssignment, nextStatus:Status) {
+    if(!supabase||!profile)return;
+    if(!isManager&&(assignment.ownerId!==profile.id||task.requesterId===profile.id)){setDataError("Somente o responsável da área pode atualizar seu status. O solicitante não pode alterar o status da própria solicitação.");return;}
+    const {error}=await supabase.from("request_areas").update({status:statusToDb[nextStatus]}).eq("request_id",task.id).eq("area_id",assignment.areaId);
+    if(error){setDataError(error.message);return;}setDataError("");if(session?.user)await loadData(session.user);
   }
 
   if (authLoading) return <div className="authScreen"><div className="authCard"><div className="brandMark"><Layers size={22}/></div><h1>Gestão de Demandas DelRio</h1><p>Verificando sua sessão...</p></div></div>;
@@ -1820,7 +1798,7 @@ export default function Home() {
       {movementForm.movement_type==="ajuste"&&<div className="notice" style={{marginTop:12}}>Informe o saldo físico total encontrado na contagem. O sistema calculará e registrará automaticamente a diferença.</div>}
       <div className="modalActions"><button className="secondary" onClick={()=>{setShowStockMovement(false);setMovementError("");}}>Cancelar</button><button className="primary" onClick={createStockMovement} disabled={stockSaving||!movementForm.material_id||movementForm.quantity===""}>{stockSaving?"Registrando...":"Registrar movimentação"}</button></div>
     </div></div>}
-    {showNew&&<div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setShowNew(false)}}><div className="modal"><div className="modalHead"><div><h2>Nova solicitação</h2><p>Preencha os dados para registrar uma demanda.</p></div><button className="iconButton" onClick={()=>setShowNew(false)}><X/></button></div><div className="formGrid"><label className="full">Título da solicitação<input value={form.title} onChange={e=>setForm({...form,title:e.target.value})} placeholder="Ex.: Criar material para campanha"/></label><label>Área responsável<select value={form.areaId} onChange={e=>setForm({...form,areaId:e.target.value})}>{areas.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label><label>Responsável<select value={form.ownerId} onChange={e=>setForm({...form,ownerId:e.target.value})} disabled={areaMembers.length===1 || areaMembers.length===0}><option value="">{areaMembers.length===1?"Atribuído automaticamente":"Selecione um responsável"}</option>{areaMembers.map(m=><option key={m.profile_id} value={m.profile_id}>{m.full_name}</option>)}</select><small>{areaMembers.length===1?`Responsável definido automaticamente: ${areaMembers[0].full_name}.`:areaMembers.length>1?"Selecione um dos responsáveis disponíveis nesta área.":"Carregando responsáveis ou nenhum integrante ativo encontrado."}</small></label><label>Prioridade<select value={form.priority} disabled={!isManager} onChange={e=>setForm({...form,priority:e.target.value as Priority})}>{(["Baixa","Média","Alta","Urgente"] as Priority[]).map(p=><option key={p}>{p}</option>)}</select><small>{isManager?"Definida pelo gestor.":"A prioridade será definida pelo gestor."}</small></label><label>Prazo de entrega<input type="date" value={form.due} onChange={e=>setForm({...form,due:e.target.value})}/></label><label className="full">Descrição<textarea rows={4} value={form.description} onChange={e=>setForm({...form,description:e.target.value})} placeholder="Descreva o que precisa ser realizado..."/></label></div><div className="modalActions"><button className="secondary" onClick={()=>setShowNew(false)}>Cancelar</button><button className="primary" onClick={createTask} disabled={saving||!form.title.trim()||!form.due||!form.areaId||areaMembers.length===0||(areaMembers.length>1&&!form.ownerId)}>{saving?"Salvando...":"Criar solicitação"}</button></div></div></div>}
+    {showNew&&<div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setShowNew(false)}}><div className="modal"><div className="modalHead"><div><h2>Nova solicitação</h2><p>Selecione uma ou mais áreas e defina um responsável para cada uma.</p></div><button className="iconButton" onClick={()=>setShowNew(false)}><X/></button></div><div className="formGrid"><label className="full">Título da solicitação<input value={form.title} onChange={e=>setForm({...form,title:e.target.value})} placeholder="Ex.: Criar material para campanha"/></label><div className="full"><b style={{display:"block",marginBottom:9}}>Áreas responsáveis</b><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(210px,1fr))",gap:9,padding:13,border:"1px solid #dfe3eb",borderRadius:10}}>{areas.map(a=><label key={a.id} style={{display:"flex",alignItems:"center",gap:8,fontWeight:400}}><input type="checkbox" checked={formAreaIds.includes(a.id)} onChange={e=>void toggleFormArea(a.id,e.target.checked)} style={{width:16,height:16,margin:0}}/>{a.name}</label>)}</div></div>{formAreaIds.map(areaId=>{const a=areas.find(x=>x.id===areaId);const list=formMembersByArea[areaId]||[];return <label className="full" key={areaId}>Responsável — {a?.name||"Área"}<select value={formOwners[areaId]||""} disabled={list.length===1||list.length===0} onChange={e=>setFormOwners(old=>({...old,[areaId]:e.target.value}))}><option value="">{list.length===1?"Atribuído automaticamente":"Selecione um responsável"}</option>{list.map(m=><option key={m.profile_id} value={m.profile_id}>{m.full_name}</option>)}</select><small>{list.length===1?`Responsável definido automaticamente: ${list[0].full_name}.`:list.length?"Selecione um integrante ativo desta área.":"Carregando responsáveis..."}</small></label>})}<label>Prioridade<select value={form.priority} disabled={!isManager} onChange={e=>setForm({...form,priority:e.target.value as Priority})}>{(["Baixa","Média","Alta","Urgente"] as Priority[]).map(p=><option key={p}>{p}</option>)}</select><small>{isManager?"Definida pelo gestor.":"A prioridade será definida pelo gestor."}</small></label><label>Prazo de entrega<input type="date" value={form.due} onChange={e=>setForm({...form,due:e.target.value})}/></label><label className="full">Descrição<textarea rows={4} value={form.description} onChange={e=>setForm({...form,description:e.target.value})} placeholder="Descreva o que precisa ser realizado..."/></label></div><div className="modalActions"><button className="secondary" onClick={()=>setShowNew(false)}>Cancelar</button><button className="primary" onClick={createTask} disabled={saving||!form.title.trim()||!form.due||!formAreaIds.length||formAreaIds.some(id=>!(formMembersByArea[id]||[]).length)||formAreaIds.some(id=>(formMembersByArea[id]||[]).length>1&&!formOwners[id])}>{saving?"Salvando...":"Criar solicitação"}</button></div></div></div>}
     {selectedMember&&<div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setSelectedMember(null)}}><div className="modal" style={{width:"96vw",maxWidth:"1600px",height:"94vh",maxHeight:"94vh",boxSizing:"border-box",overflowY:"auto",padding:"28px 32px"}}><div className="modalHead"><div><p className="eyebrow">GESTÃO DA EQUIPE</p><h2>{selectedMember.full_name}</h2><p>{selectedMember.email||"E-mail não informado"}</p></div><button className="iconButton" onClick={()=>setSelectedMember(null)}><X/></button></div>
       {profile?.role==="admin"?<><div className="formGrid"><label className="full">Nome completo<input value={memberForm.full_name} onChange={e=>setMemberForm({...memberForm,full_name:e.target.value})}/></label><label>Perfil de acesso<select value={memberForm.role} onChange={e=>setMemberForm({...memberForm,role:e.target.value as Profile["role"]})}><option value="colaborador">Colaborador</option><option value="gestor">Gestor</option><option value="admin">Administrador</option></select></label><div className="full"><span style={{display:"block",fontWeight:600,marginBottom:10}}>Áreas vinculadas</span><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(210px,1fr))",gap:10,padding:14,border:"1px solid #dfe3eb",borderRadius:10}}>{areas.map(a=><label key={a.id} style={{display:"flex",alignItems:"center",gap:9,fontWeight:400,cursor:"pointer"}}><input type="checkbox" checked={memberForm.area_ids.includes(a.id)} onChange={e=>setMemberForm(old=>({...old,area_ids:e.target.checked?[...old.area_ids,a.id]:old.area_ids.filter(id=>id!==a.id)}))} style={{width:16,height:16,margin:0}}/>{a.name}</label>)}</div><small style={{display:"block",marginTop:7,color:"#667085"}}>Selecione uma ou mais áreas para este colaborador.</small></div><div className="full" style={{padding:14,border:"1px solid #dfe3eb",borderRadius:10}}><b style={{display:"block",marginBottom:8}}>Permissão de estoque</b>{memberForm.role==="admin"?<small>Administradores possuem acesso automático ao gerenciamento de estoque.</small>:<label style={{display:"flex",alignItems:"center",gap:9,fontWeight:400,cursor:"pointer"}}><input type="checkbox" checked={memberForm.stock_manager} onChange={e=>setMemberForm({...memberForm,stock_manager:e.target.checked})} style={{width:16,height:16,margin:0}}/>Gerenciar Estoque</label>}<small style={{display:"block",marginTop:7,color:"#667085"}}>Quando habilitada, a pessoa poderá cadastrar materiais e registrar movimentações de estoque.</small></div><label className="full">Situação<select value={memberForm.active?"true":"false"} onChange={e=>setMemberForm({...memberForm,active:e.target.value==="true"})}><option value="true">Ativo</option><option value="false">Inativo</option></select></label></div>{memberMessage&&<div className="errorBox" style={{marginTop:14}}>{memberMessage}</div>}<div className="modalActions"><button className="secondary" onClick={()=>setSelectedMember(null)}>Cancelar</button><button className="primary" onClick={saveMember} disabled={memberSaving||!memberForm.full_name.trim()}>{memberSaving?"Salvando...":"Salvar alterações"}</button></div></>:<><div className="detailGrid"><div><small>Nome completo</small><b>{selectedMember.full_name}</b></div><div><small>E-mail</small><b>{selectedMember.email||"Não informado"}</b></div><div><small>Perfil de acesso</small><b>{selectedMember.role==="admin"?"Administrador":selectedMember.role==="gestor"?"Gestor":"Colaborador"}</b></div><div><small>Situação</small><b>{selectedMember.active?"Ativo":"Inativo"}</b></div><div><small>Áreas vinculadas</small><b>{(selectedMember.area_ids||[]).length ? areas.filter(a=>(selectedMember.area_ids||[]).includes(a.id)).map(a=>a.name).join(" · ") : "Não definidas"}</b></div><div><small>Permissão de estoque</small><b>{selectedMember.role==="admin"?"Acesso automático":selectedMember.stock_manager?"Gerencia estoque":"Sem permissão"}</b></div></div><div className="modalActions"><button className="secondary" onClick={()=>setSelectedMember(null)}>Fechar</button></div></>}
       <div className="panel" style={{marginTop:22}}>
@@ -1835,9 +1813,9 @@ export default function Home() {
         <div style={{maxHeight:"48vh",overflowY:"auto",width:"100%"}}><TaskTable tasks={pageItems("memberTasks",visibleMemberTasks)} onSelect={task=>{setSelectedMember(null);setSelected(task)}} unreadCounts={unreadCounts}/><Pagination {...paginationProps("memberTasks",visibleMemberTasks.length)}/></div>
       </div>
     </div></div>}
-    {selected&&<div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setSelected(null)}}><div className="modal requestDetailModal"><div className="modalHead"><div><p className="eyebrow">PROTOCOLO #{selected.protocol}</p><h2>{selected.title}</h2><p>{selected.area} · Aberta em {new Date(selected.created+"T12:00:00").toLocaleDateString("pt-BR")}</p></div><button className="iconButton" onClick={()=>setSelected(null)}><X/></button></div><div className="detailGrid"><div><small>Responsável</small><b>{selected.owner}</b></div><div><small>Prazo</small><b>{new Date(selected.due+"T12:00:00").toLocaleDateString("pt-BR")}</b></div><div><small>Prioridade</small><b>{selected.priority}</b></div><div><small>Status atual</small><StatusBadge status={selected.status}/></div></div><p className="description">{selected.description||"Sem descrição adicional."}</p>
+    {selected&&<div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setSelected(null)}}><div className="modal requestDetailModal"><div className="modalHead"><div><p className="eyebrow">PROTOCOLO #{selected.protocol}</p><h2>{selected.title}</h2><p>{selected.area} · Aberta em {new Date(selected.created+"T12:00:00").toLocaleDateString("pt-BR")}</p></div><button className="iconButton" onClick={()=>setSelected(null)}><X/></button></div><div className="detailGrid"><div><small>Áreas responsáveis</small><b>{selected.areaAssignments.map(a=>a.area).join(" · ")||selected.area}</b></div><div><small>Prazo</small><b>{new Date(selected.due+"T12:00:00").toLocaleDateString("pt-BR")}</b></div><div><small>Prioridade</small><b>{selected.priority}</b></div><div><small>Status geral</small><StatusBadge status={selected.status}/></div></div><div style={{display:"grid",gap:12,marginTop:16}}><h3 style={{margin:"4px 0"}}>Acompanhamento por área</h3>{selected.areaAssignments.map(assignment=><div key={assignment.areaId} style={{border:"1px solid #e5e1eb",borderRadius:12,padding:14,display:"grid",gap:8}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap"}}><b>{assignment.area}</b><StatusBadge status={assignment.status}/></div><div style={{fontSize:13,color:"#667085"}}>Responsável: <b>{assignment.owner}</b>{assignment.isPrimary?" · Área principal":""}</div>{(isManager||(assignment.ownerId===profile?.id&&selected.requesterId!==profile?.id))?<label>Atualizar status desta área<select value={assignment.status} onChange={e=>void updateAreaStatus(selected,assignment,e.target.value as Status)}>{(["Recebida","Em análise","Aguardando aprovação","Em execução","Concluída","Cancelada"] as Status[]).map(s=><option key={s}>{s}</option>)}</select></label>:null}</div>)}</div><p className="description">{selected.description||"Sem descrição adicional."}</p>
       {pendingTaskUpdate&&pendingTaskUpdate.task.id===selected.id&&<div style={{padding:14,marginTop:14,border:"1px solid #d9c5f0",background:"#fbf8ff",borderRadius:10}}><b style={{color:"#54218a"}}>Confirmar alteração?</b><p style={{margin:"7px 0 12px",fontSize:13,color:"#5f5b6b"}}>Confira a mudança antes de salvar e fechar a solicitação.</p><div style={{display:"grid",gap:5,marginBottom:14,fontSize:13,color:"#454253"}}>{pendingTaskUpdate.patch.status&&<div><b>Status:</b> {pendingTaskUpdate.task.status} → {pendingTaskUpdate.patch.status}</div>}{pendingTaskUpdate.patch.priority&&<div><b>Prioridade:</b> {pendingTaskUpdate.task.priority} → {pendingTaskUpdate.patch.priority}</div>}{pendingTaskUpdate.patch.ownerId!==undefined&&<div><b>Responsável:</b> {pendingTaskUpdate.task.owner} → {pendingTaskUpdate.patch.ownerId?members.find(member=>member.id===pendingTaskUpdate.patch.ownerId)?.full_name||"Responsável selecionado":"Não atribuído"}</div>}</div><div className="modalActions" style={{marginTop:0}}><button className="secondary" onClick={()=>setPendingTaskUpdate(null)}>Cancelar</button><button className="primary" onClick={()=>void updateTask(pendingTaskUpdate.task,pendingTaskUpdate.patch)}>Confirmar, salvar e fechar</button></div></div>}
-      {(isManager || (selected.ownerId===profile?.id && selected.requesterId!==profile?.id))?<label>Atualizar status<select value={selected.status} onChange={e=>{const nextStatus=e.target.value as Status;if(nextStatus==="Concluída"&&selected.status!=="Concluída"){setCompleteConfirm(true);return;}setPendingTaskUpdate({task:selected,patch:{status:nextStatus}});}}>{(["Recebida","Em análise","Aguardando aprovação","Em execução","Concluída","Cancelada"] as Status[]).map(s=><option key={s}>{s}</option>)}</select></label>:<p className="notice">O status é atualizado pelo responsável pela demanda ou pela gestão. O solicitante pode acompanhar a solicitação, mas não alterar seu status.</p>}{completeConfirm&&<div style={{padding:14,marginTop:12,border:"1px solid #f5d08a",background:"#fffbeb",borderRadius:10}}><b style={{color:"#92400e"}}>Confirmar conclusão da solicitação?</b><div className="modalActions" style={{marginTop:0}}><button className="secondary" onClick={()=>setCompleteConfirm(false)}>Voltar</button><button className="primary" onClick={()=>updateTask(selected,{status:"Concluída"})}>Confirmar conclusão</button></div></div>}{isManager&&<><label>Responsável<select value={selected.ownerId||""} onChange={e=>setPendingTaskUpdate({task:selected,patch:{ownerId:e.target.value||null}})}><option value="">Selecione um responsável</option>{selectedAreaMembers.map(m=><option key={m.profile_id} value={m.profile_id}>{m.full_name}</option>)}</select><small>Somente integrantes ativos da área {selected.area} podem ser atribuídos.</small></label><label>Prioridade<select value={selected.priority} onChange={e=>setPendingTaskUpdate({task:selected,patch:{priority:e.target.value as Priority}})}>{(["Baixa","Média","Alta","Urgente"] as Priority[]).map(s=><option key={s}>{s}</option>)}</select></label></>}{(isManager || selected.requesterId===profile?.id)&&<div style={{marginTop:18}}>
+      <p className="notice">O status geral é atualizado automaticamente conforme o andamento das áreas responsáveis.</p>{isManager&&<><label>Responsável<select value={selected.ownerId||""} onChange={e=>setPendingTaskUpdate({task:selected,patch:{ownerId:e.target.value||null}})}><option value="">Selecione um responsável</option>{selectedAreaMembers.map(m=><option key={m.profile_id} value={m.profile_id}>{m.full_name}</option>)}</select><small>Somente integrantes ativos da área {selected.area} podem ser atribuídos.</small></label><label>Prioridade<select value={selected.priority} onChange={e=>setPendingTaskUpdate({task:selected,patch:{priority:e.target.value as Priority}})}>{(["Baixa","Média","Alta","Urgente"] as Priority[]).map(s=><option key={s}>{s}</option>)}</select></label></>}{(isManager || selected.requesterId===profile?.id)&&<div style={{marginTop:18}}>
       {deleteConfirm ? <div style={{padding:14,border:"1px solid #fecaca",background:"#fff7f7",borderRadius:10}}>
         <b style={{color:"#b42318"}}>Confirmar exclusão?</b>
         <p style={{margin:"6px 0 12px",fontSize:13,color:"#667085"}}>A solicitação será retirada das listas, mas permanecerá preservada no histórico do banco de dados.</p>
