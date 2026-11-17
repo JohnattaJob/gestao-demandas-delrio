@@ -732,11 +732,11 @@ export default function Home() {
       ...reportByOwner.map(person=>[person.name,String(person.total),String(person.done),String(person.inProgress),String(person.late)]),
       [],
       ["DETALHAMENTO DAS SOLICITAÇÕES"],
-      ["Protocolo","Solicitação","Área","Responsável","Solicitante","Prioridade","Status","Data de abertura","Prazo","Data de conclusão"],
-      ...[...reportTasks].sort((a,b)=>b.created.localeCompare(a.created)).map(task=>[
-        String(task.protocol),task.title,task.area,task.owner,task.requester,task.priority,task.status,
+      ["Protocolo","Solicitação","Área responsável","Responsável da área","Status da área","Solicitante","Prioridade","Status geral","Data de abertura","Prazo","Data de conclusão"],
+      ...[...reportTasks].sort((a,b)=>b.created.localeCompare(a.created)).flatMap(task=>task.areaAssignments.map(assignment=>[
+        String(task.protocol),task.title,assignment.area,assignment.owner,assignment.status,task.requester,task.priority,task.status,
         formatDate(task.created),formatDate(task.due),formatDate(task.completedAt?.slice(0,10)||"")
-      ])
+      ]))
     ];
     const csv = "\uFEFF" + rows.map(row=>row.map(csvCell).join(";")).join("\r\n");
     const blob = new Blob([csv],{type:"text/csv;charset=utf-8;"});
@@ -772,11 +772,12 @@ export default function Home() {
   const scheduleOverdueCount = tasks.filter(t=>t.status!=="Concluída"&&t.status!=="Cancelada"&&t.due&&t.due<scheduleToday).length;
   const scheduleTodayCount = tasks.filter(t=>t.status!=="Concluída"&&t.status!=="Cancelada"&&t.due===scheduleToday).length;
   const scheduleNextSevenCount = tasks.filter(t=>t.status!=="Concluída"&&t.status!=="Cancelada"&&t.due&&t.due>=scheduleToday&&t.due<=(()=>{const d=new Date();d.setDate(d.getDate()+7);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`})()).length;
-  const selectedMemberTasks = useMemo(() => selectedMember ? tasks.filter(t => t.areaAssignments.some(a=>a.ownerId===selectedMember.id)) : [], [tasks, selectedMember]);
-  const visibleMemberTasks = useMemo(() => memberTaskStatus === "Todas" ? selectedMemberTasks : selectedMemberTasks.filter(t => t.status === memberTaskStatus), [selectedMemberTasks, memberTaskStatus]);
-  const memberTasksLate = selectedMemberTasks.filter(t => t.status !== "Concluída" && t.status !== "Cancelada" && t.due && new Date(t.due + "T23:59:00") < new Date()).length;
-  const memberTasksInProgress = selectedMemberTasks.filter(t => t.status === "Em execução" || t.status === "Em análise" || t.status === "Aguardando aprovação").length;
-  const memberTasksDone = selectedMemberTasks.filter(t => t.status === "Concluída").length;
+  const selectedMemberAssignments = useMemo(() => selectedMember ? tasks.flatMap(task=>task.areaAssignments.filter(a=>a.ownerId===selectedMember.id).map(assignment=>({task,assignment}))) : [], [tasks, selectedMember]);
+  const selectedMemberTasks = useMemo(() => [...new Map(selectedMemberAssignments.map(item=>[item.task.id,item.task])).values()], [selectedMemberAssignments]);
+  const visibleMemberTasks = useMemo(() => memberTaskStatus === "Todas" ? selectedMemberTasks : [...new Map(selectedMemberAssignments.filter(item=>item.assignment.status===memberTaskStatus).map(item=>[item.task.id,item.task])).values()], [selectedMemberTasks, selectedMemberAssignments, memberTaskStatus]);
+  const memberTasksLate = selectedMemberAssignments.filter(({task,assignment}) => assignment.status !== "Concluída" && assignment.status !== "Cancelada" && task.due && new Date(task.due + "T23:59:00") < new Date()).length;
+  const memberTasksInProgress = selectedMemberAssignments.filter(({assignment}) => assignment.status === "Em execução" || assignment.status === "Em análise" || assignment.status === "Aguardando aprovação").length;
+  const memberTasksDone = selectedMemberAssignments.filter(({assignment}) => assignment.status === "Concluída").length;
   const filteredMaterials = useMemo(() => stockMaterials.filter(m =>
     [m.name,m.sku || "",m.description || ""].join(" ").toLowerCase().includes(stockSearch.toLowerCase())
   ),[stockMaterials,stockSearch]);
@@ -1810,9 +1811,9 @@ export default function Home() {
         <div className="panelHead"><div><h3>Demandas atribuídas</h3><p>Acompanhamento das atividades sob responsabilidade de {selectedMember.full_name}.</p></div><span className="muted">{selectedMemberTasks.length} demanda(s)</span></div>
         <div className="stats" style={{gridTemplateColumns:"repeat(4,minmax(0,1fr))",marginBottom:18}}>
           <Stat icon={<ClipboardList/>} label="Total" value={selectedMemberTasks.length} tone="blue"/>
-          <Stat icon={<Activity/>} label="Em andamento" value={memberTasksInProgress} tone="violet"/>
-          <Stat icon={<CheckCircle2/>} label="Concluídas" value={memberTasksDone} tone="green"/>
-          <Stat icon={<AlertTriangle/>} label="Atrasadas" value={memberTasksLate} tone="red"/>
+          <Stat icon={<Activity/>} label="Áreas em andamento" value={memberTasksInProgress} tone="violet"/>
+          <Stat icon={<CheckCircle2/>} label="Áreas concluídas" value={memberTasksDone} tone="green"/>
+          <Stat icon={<AlertTriangle/>} label="Áreas atrasadas" value={memberTasksLate} tone="red"/>
         </div>
         <div className="toolbar" style={{alignItems:"end",gap:18,flexWrap:"wrap"}}><div><b>Lista de demandas</b><p className="muted">Clique em uma demanda para abrir os detalhes e supervisionar o andamento.</p></div><div style={{width:"min(240px,100%)"}}><label className="scheduleFieldLabel" htmlFor="member-task-status">Filtrar por status</label><select id="member-task-status" className="scheduleSelect" value={memberTaskStatus} onChange={e=>setMemberTaskStatus(e.target.value)}><option value="Todas">Todos os status</option>{(["Recebida","Em análise","Aguardando aprovação","Em execução","Concluída","Cancelada"] as Status[]).map(status=><option key={status} value={status}>{status}</option>)}</select></div></div>
         <div style={{maxHeight:"48vh",overflowY:"auto",width:"100%"}}><TaskTable tasks={pageItems("memberTasks",visibleMemberTasks)} onSelect={task=>{setSelectedMember(null);setSelected(task)}} unreadCounts={unreadCounts}/><Pagination {...paginationProps("memberTasks",visibleMemberTasks.length)}/></div>
