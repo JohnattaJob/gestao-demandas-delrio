@@ -1349,14 +1349,20 @@ export default function Home() {
              .ordersPresetButton{height:39px;padding:0 14px;border:1px solid #e1e2ea;border-radius:10px;background:#fff;color:#55536a;font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;transition:all .15s}
              .ordersPresetButton:hover{border-color:#b98be8;color:#7624c7}
              .ordersPresetButton.active{border-color:#8b24e8;background:#f5edff;color:#7624c7;box-shadow:0 0 0 1px rgba(122,27,216,.08)}
-             .ordersExtraFilters{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-top:14px}
+             .ordersRefineSection{margin-top:20px;padding-top:17px;border-top:1px solid #eeeaf4}
+             .ordersRefineHeading{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+             .ordersRefineHeading span{font-size:12px;font-weight:700;color:#383448}
+             .ordersRefineHeading small{font-size:11px;color:#9692a5}
+             .ordersExtraFilters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+             .ordersFilterField{min-width:0}
+             .ordersCustomDates{margin-top:16px;padding:14px;background:#faf8fd;border:1px solid #eeeaf4;border-radius:12px}
              .ordersSelect{width:100%;height:43px;box-sizing:border-box;border:1px solid #e1e2ea;border-radius:10px;background:#fff;padding:0 12px;color:#292837;font-size:13px;font-weight:500;font-family:inherit;outline:none}
              .ordersSelect:focus{border-color:#9b5cdb;box-shadow:0 0 0 3px rgba(122,27,216,.10)}
              .ordersFilterBottom{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:18px;padding-top:14px;border-top:1px solid #f0edf4;flex-wrap:wrap;color:#777487;font-size:12px}
              .ordersFilterBottom strong{color:#4b3a60;font-weight:700}
              .ordersFilterClear{border:0;background:transparent;color:#7624c7;font-size:12px;font-weight:700;padding:9px 10px;border-radius:8px;cursor:pointer;white-space:nowrap}
              .ordersFilterClear:hover{background:#f5edff}
-             @media(max-width:560px){.ordersFilterCard{padding:18px}.ordersFilterGrid{grid-template-columns:1fr;gap:16px}.ordersFilterTop{margin-bottom:17px}}
+             @media(max-width:640px){.ordersFilterCard{padding:18px}.ordersFilterGrid,.ordersExtraFilters{grid-template-columns:1fr;gap:12px}.ordersFilterTop{margin-bottom:17px}.ordersPresetRow{gap:7px}.ordersPresetButton{flex:1 1 auto;padding:0 11px}}
            `}</style>
            <section className="panel ordersFilterCard">
              <div className="ordersFilterTop"><div className="ordersFilterTitle"><span className="ordersFilterIcon"><CalendarDays size={19}/></span><div><h3>Filtrar pedidos</h3><p>Combine período, status e área solicitante para refinar a consulta.</p></div></div><button type="button" className="ordersFilterClear" onClick={()=>{applyOrdersPeriod("all");setOrdersStatusFilter("todos");setOrdersAreaFilter("todos")}}>Limpar filtros</button></div>
@@ -1369,14 +1375,17 @@ export default function Home() {
                 <button type="button" className={`ordersPresetButton ${ordersPeriodPreset==="year"?"active":""}`} onClick={()=>applyOrdersPeriod("year")}>Este ano</button>
                 <button type="button" className={`ordersPresetButton ${ordersPeriodPreset==="custom"?"active":""}`} onClick={()=>applyOrdersPeriod("custom")}>Personalizado</button>
               </div>
-              <div className="ordersExtraFilters">
-                <div><label className="ordersFieldLabel" htmlFor="orders-status-filter">Status do pedido</label><select id="orders-status-filter" className="ordersSelect" value={ordersStatusFilter} onChange={e=>setOrdersStatusFilter(e.target.value as MaterialOrderStatus|"todos")}><option value="todos">Todos os status</option>{(Object.entries(orderStatusLabels) as [MaterialOrderStatus,string][]).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></div>
-                <div><label className="ordersFieldLabel" htmlFor="orders-area-filter">Área solicitante</label><select id="orders-area-filter" className="ordersSelect" value={ordersAreaFilter} onChange={e=>setOrdersAreaFilter(e.target.value)}><option value="todos">Todas as áreas</option>{areas.slice().sort((a,b)=>a.name.localeCompare(b.name,"pt-BR")).map(area=><option key={area.id} value={area.id}>{area.name}</option>)}</select></div>
-              </div>
-              {ordersPeriodPreset==="custom"&&<div className="ordersFilterGrid">
+              {ordersPeriodPreset==="custom"&&<div className="ordersFilterGrid ordersCustomDates">
                 <div><label className="ordersFieldLabel" htmlFor="orders-start-date">Data inicial</label><input id="orders-start-date" className="ordersDateInput" type="date" value={ordersStartDate} onChange={e=>setOrdersStartDate(e.target.value)} max={ordersEndDate||undefined}/></div>
                 <div><label className="ordersFieldLabel" htmlFor="orders-end-date">Data final</label><input id="orders-end-date" className="ordersDateInput" type="date" value={ordersEndDate} onChange={e=>setOrdersEndDate(e.target.value)} min={ordersStartDate||undefined}/></div>
-              </div>}<div className="ordersFilterBottom"><span>{ordersDateRangeInvalid?<strong style={{color:"#b42318"}}>A data inicial não pode ser posterior à data final.</strong>:<>Exibindo <strong>{filteredMaterialOrders.length}</strong> de <strong>{materialOrders.length}</strong> pedido(s).</>}</span></div>
+              </div>}
+              <div className="ordersRefineSection">
+                <div className="ordersRefineHeading"><span>Refinar resultados</span><small>Filtros combináveis</small></div>
+                <div className="ordersExtraFilters">
+                  <div className="ordersFilterField"><label className="ordersFieldLabel" htmlFor="orders-status-filter">Status do pedido</label><select id="orders-status-filter" className="ordersSelect" value={ordersStatusFilter} onChange={e=>setOrdersStatusFilter(e.target.value as MaterialOrderStatus|"todos")}><option value="todos">Todos os status</option>{(Object.entries(orderStatusLabels) as [MaterialOrderStatus,string][]).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></div>
+                  <div className="ordersFilterField"><label className="ordersFieldLabel" htmlFor="orders-area-filter">Área solicitante</label><select id="orders-area-filter" className="ordersSelect" value={ordersAreaFilter} onChange={e=>setOrdersAreaFilter(e.target.value)}><option value="todos">Todas as áreas</option>{areas.slice().sort((a,b)=>a.name.localeCompare(b.name,"pt-BR")).map(area=><option key={area.id} value={area.id}>{area.name}</option>)}</select></div>
+                </div>
+              </div><div className="ordersFilterBottom"><span>{ordersDateRangeInvalid?<strong style={{color:"#b42318"}}>A data inicial não pode ser posterior à data final.</strong>:<>Exibindo <strong>{filteredMaterialOrders.length}</strong> de <strong>{materialOrders.length}</strong> pedido(s).</>}</span></div>
            </section>
           <div className="stats"><Stat icon={<ClipboardList/>} label="Pedidos visíveis" value={filteredMaterialOrders.length} tone="blue"/><Stat icon={<Clock3/>} label="Aguardando gestor" value={pendingManagerOrders} tone="violet"/><Stat icon={<PackageCheck/>} label="Aguardando estoque" value={pendingStockOrders} tone="amber"/><Stat icon={<Layers/>} label="Em atendimento" value={activeMaterialOrders} tone="green"/></div>
           <div className="panel"><div className="panelHead"><div><h3>Pedidos cadastrados</h3><p>Os pedidos exibidos respeitam as permissões de acesso do seu perfil.</p></div><span className="muted">{filteredMaterialOrders.length} registro(s)</span></div>
