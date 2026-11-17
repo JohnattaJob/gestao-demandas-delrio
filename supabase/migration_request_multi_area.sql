@@ -70,22 +70,28 @@ SECURITY DEFINER
 SET search_path = ''
 AS $$
 BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM public.areas a
-    WHERE a.id = NEW.area_id AND a.active = true
-  ) THEN
-    RAISE EXCEPTION 'A área selecionada não existe ou está inativa.';
-  END IF;
+  -- A validação de vínculo ocorre na criação ou quando área/responsável mudarem.
+  -- Uma desativação posterior do cadastro não deve impedir a área de atualizar seu status.
+  IF TG_OP = 'INSERT'
+     OR NEW.area_id IS DISTINCT FROM OLD.area_id
+     OR NEW.owner_id IS DISTINCT FROM OLD.owner_id THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM public.areas a
+      WHERE a.id = NEW.area_id AND a.active = true
+    ) THEN
+      RAISE EXCEPTION 'A área selecionada não existe ou está inativa.';
+    END IF;
 
-  IF NOT EXISTS (
-    SELECT 1
-    FROM public.profile_areas pa
-    JOIN public.profiles p ON p.id = pa.profile_id
-    WHERE pa.profile_id = NEW.owner_id
-      AND pa.area_id = NEW.area_id
-      AND p.active = true
-  ) THEN
-    RAISE EXCEPTION 'O responsável precisa ser um integrante ativo da área selecionada.';
+    IF NOT EXISTS (
+      SELECT 1
+      FROM public.profile_areas pa
+      JOIN public.profiles p ON p.id = pa.profile_id
+      WHERE pa.profile_id = NEW.owner_id
+        AND pa.area_id = NEW.area_id
+        AND p.active = true
+    ) THEN
+      RAISE EXCEPTION 'O responsável precisa ser um integrante ativo da área selecionada.';
+    END IF;
   END IF;
 
   NEW.updated_at := now();
@@ -101,7 +107,7 @@ $$;
 
 DROP TRIGGER IF EXISTS request_areas_validate_assignment ON public.request_areas;
 CREATE TRIGGER request_areas_validate_assignment
-  BEFORE INSERT OR UPDATE OF area_id, owner_id, status
+  BEFORE INSERT OR UPDATE
   ON public.request_areas
   FOR EACH ROW
   EXECUTE FUNCTION public.validate_request_area_assignment();
