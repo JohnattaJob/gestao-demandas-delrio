@@ -433,7 +433,13 @@ BEGIN
     RAISE EXCEPTION 'Somente gestores podem adicionar áreas ou reatribuir responsáveis.';
   END IF;
 
-  v_is_primary := COALESCE(p_is_primary, false);
+  SELECT COALESCE(bool_or(ra.is_primary), false)
+  INTO v_is_primary
+  FROM public.request_areas ra
+  WHERE ra.request_id = p_request_id
+    AND ra.area_id = p_area_id;
+
+  v_is_primary := COALESCE(p_is_primary, false) OR v_is_primary;
 
   IF NOT EXISTS (SELECT 1 FROM public.requests r WHERE r.id = p_request_id) THEN
     RAISE EXCEPTION 'Solicitação não encontrada.';
@@ -490,7 +496,8 @@ CREATE POLICY request_areas_update_authorized
   USING (
     public.is_manager()
     OR (
-      owner_id = (SELECT auth.uid())
+      public.is_active_user()
+      AND owner_id = (SELECT auth.uid())
       AND EXISTS (
         SELECT 1
         FROM public.requests r
@@ -502,7 +509,8 @@ CREATE POLICY request_areas_update_authorized
   WITH CHECK (
     public.is_manager()
     OR (
-      owner_id = (SELECT auth.uid())
+      public.is_active_user()
+      AND owner_id = (SELECT auth.uid())
       AND EXISTS (
         SELECT 1
         FROM public.requests r
