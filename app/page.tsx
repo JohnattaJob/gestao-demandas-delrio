@@ -606,7 +606,7 @@ export default function Home() {
   const filtered = useMemo(() => tasks.filter(t => {
     const matchesSearch = [t.title,t.owner,t.area,t.status,String(t.protocol),...t.areaAssignments.flatMap(a=>[a.area,a.owner,a.status])].join(" ").toLowerCase().includes(search.toLowerCase());
     const matchesUser = requestUserFilter === "Todos"
-      || (requestUserFilter === "Sem responsável" && !t.ownerId)
+      || (requestUserFilter === "Sem responsável" && t.areaAssignments.every(a=>!a.ownerId))
       || t.areaAssignments.some(a=>a.ownerId===requestUserFilter);
     return matchesSearch && matchesUser;
   }),[tasks,search,requestUserFilter]);
@@ -644,16 +644,16 @@ export default function Home() {
   const dashboardInProgress = dashboardTasks.filter(t=>t.status==="Em execução"||t.status==="Em análise"||t.status==="Aguardando aprovação").length;
   const requestsByOwner = useMemo(() => {
     const grouped = new Map<string,{id:string;name:string;total:number;inProgress:number;done:number;late:number;cancelled:number}>();
-    dashboardTasks.forEach(task => {
-      if (!task.ownerId) return;
-      const current = grouped.get(task.ownerId) || {id:task.ownerId,name:task.owner,total:0,inProgress:0,done:0,late:0,cancelled:0};
+    dashboardTasks.forEach(task => task.areaAssignments.forEach(assignment => {
+      if (!assignment.ownerId) return;
+      const current = grouped.get(assignment.ownerId) || {id:assignment.ownerId,name:assignment.owner,total:0,inProgress:0,done:0,late:0,cancelled:0};
       current.total += 1;
-      if (task.status === "Em análise" || task.status === "Aguardando aprovação" || task.status === "Em execução") current.inProgress += 1;
-      if (task.status === "Concluída") current.done += 1;
-      if (task.status === "Cancelada") current.cancelled += 1;
-      if (task.status !== "Concluída" && task.status !== "Cancelada" && task.due && new Date(task.due+"T23:59:00") < new Date()) current.late += 1;
-      grouped.set(task.ownerId,current);
-    });
+      if (assignment.status === "Em análise" || assignment.status === "Aguardando aprovação" || assignment.status === "Em execução") current.inProgress += 1;
+      if (assignment.status === "Concluída") current.done += 1;
+      if (assignment.status === "Cancelada") current.cancelled += 1;
+      if (assignment.status !== "Concluída" && assignment.status !== "Cancelada" && task.due && new Date(task.due+"T23:59:00") < new Date()) current.late += 1;
+      grouped.set(assignment.ownerId,current);
+    }));
     return [...grouped.values()].sort((a,b)=>b.total-a.total || a.name.localeCompare(b.name,"pt-BR"));
   },[dashboardTasks]);
   const reportDateRange = useMemo(() => {
@@ -688,7 +688,7 @@ export default function Home() {
   const reportCancelled = reportTasks.filter(t=>t.status==="Cancelada").length;
   const reportCompletionBase = reportTasks.filter(t=>t.status!=="Cancelada").length;
   const reportCompletionRate = reportCompletionBase ? Math.round(reportDone/reportCompletionBase*100) : 0;
-  const reportByArea = areaNames.map(name=>({name,total:reportTasks.filter(t=>t.area===name).length})).filter(x=>x.total>0).sort((a,b)=>b.total-a.total);
+  const reportByArea = areaNames.map(name=>({name,total:reportTasks.filter(t=>t.areaAssignments.some(a=>a.area===name)).length})).filter(x=>x.total>0).sort((a,b)=>b.total-a.total);
   const reportByOwner = (() => {
     const grouped = new Map<string,{id:string;name:string;total:number;done:number;inProgress:number;late:number}>();
     reportTasks.forEach(task=>task.areaAssignments.forEach(assignment=>{const key=assignment.ownerId||"unassigned";const item=grouped.get(key)||{id:key,name:assignment.ownerId?assignment.owner:"Sem responsável",total:0,done:0,inProgress:0,late:0};item.total++;if(assignment.status==="Concluída")item.done++;if(assignment.status==="Em execução"||assignment.status==="Em análise"||assignment.status==="Aguardando aprovação")item.inProgress++;if(assignment.status!=="Concluída"&&assignment.status!=="Cancelada"&&task.due&&new Date(task.due+"T23:59:00")<new Date())item.late++;grouped.set(key,item);}));
@@ -1307,7 +1307,7 @@ export default function Home() {
             </div>
             <div className="requestFilterGrid">
               <div className="requestFilterField"><label htmlFor="request-search">Buscar solicitações</label><div className="requestFilterSearch"><Search size={16}/><input id="request-search" className="requestFilterControl" placeholder="Título, área, responsável ou status..." value={search} onChange={e=>setSearch(e.target.value)}/></div></div>
-              <div className="requestFilterField"><label htmlFor="request-user-filter">Responsável</label><select id="request-user-filter" className="requestFilterControl" value={requestUserFilter} onChange={e=>setRequestUserFilter(e.target.value)}><option value="Todos">Todos os usuários</option>{requestUsers.map(([id,name])=><option key={id} value={id}>{name}</option>)}{tasks.some(t=>!t.ownerId)&&<option value="Sem responsável">Sem responsável</option>}</select></div>
+              <div className="requestFilterField"><label htmlFor="request-user-filter">Responsável</label><select id="request-user-filter" className="requestFilterControl" value={requestUserFilter} onChange={e=>setRequestUserFilter(e.target.value)}><option value="Todos">Todos os usuários</option>{requestUsers.map(([id,name])=><option key={id} value={id}>{name}</option>)}{tasks.some(t=>t.areaAssignments.some(a=>!a.ownerId))&&<option value="Sem responsável">Sem responsável</option>}</select></div>
             </div>
             <div className="requestFilterBottom"><span><strong>{filtered.length}</strong> registro(s) encontrado(s)</span></div>
           </section>
