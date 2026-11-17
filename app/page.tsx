@@ -577,8 +577,9 @@ export default function Home() {
     let active = true;
     async function loadSelectedAreaMembers() {
       if (!supabase || !selected || !isManager) { setSelectedAreaMembers([]); setDetailMembersByArea({}); return; }
+      const client = supabase;
       const entries = await Promise.all(selected.areaAssignments.map(async assignment => {
-        const {data,error}=await supabase.rpc("get_area_members",{target_area:assignment.areaId});
+        const {data,error}=await client.rpc("get_area_members",{target_area:assignment.areaId});
         if(error) throw error;
         return [assignment.areaId,(data||[]) as AreaMember[]] as const;
       }));
