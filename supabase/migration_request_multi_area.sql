@@ -180,7 +180,6 @@ AS $$
 DECLARE
   v_request_id uuid;
   v_status public.request_status;
-  v_previous_setting text;
 BEGIN
   IF TG_OP = 'DELETE' THEN
     v_request_id := OLD.request_id;
@@ -202,15 +201,10 @@ BEGIN
   WHERE ra.request_id = v_request_id;
 
   IF v_status IS NOT NULL THEN
-    v_previous_setting := current_setting('app.sync_request_status', true);
-    PERFORM set_config('app.sync_request_status', 'on', true);
-
     UPDATE public.requests
     SET status = v_status,
         updated_at = now()
     WHERE id = v_request_id;
-
-    PERFORM set_config('app.sync_request_status', COALESCE(v_previous_setting, ''), true);
   END IF;
 
   IF TG_OP = 'DELETE' THEN
@@ -244,7 +238,8 @@ BEGIN
        OR NEW.due_date IS DISTINCT FROM OLD.due_date
        OR NEW.created_at IS DISTINCT FROM OLD.created_at
        OR NEW.protocol IS DISTINCT FROM OLD.protocol
-       OR NEW.completed_at IS DISTINCT FROM OLD.completed_at THEN
+       OR NEW.completed_at IS DISTINCT FROM OLD.completed_at
+       OR NEW.deleted_at IS DISTINCT FROM OLD.deleted_at THEN
       RAISE EXCEPTION 'Somente gestores podem alterar os dados administrativos da solicitação.';
     END IF;
   END IF;
@@ -255,8 +250,20 @@ BEGIN
        FROM public.request_areas ra
        WHERE ra.request_id = OLD.id
      )
-     AND current_setting('app.sync_request_status', true) IS DISTINCT FROM 'on' THEN
-    RAISE EXCEPTION 'O status geral é calculado automaticamente a partir das áreas responsáveis.';
+     AND NEW.status IS DISTINCT FROM (
+       SELECT
+         CASE
+           WHEN count(*) = 0 THEN NULL
+           WHEN bool_and(ra.status IN ('concluida', 'cancelada')) THEN 'concluida'::public.request_status
+           WHEN bool_or(ra.status = 'em_execucao') THEN 'em_execucao'::public.request_status
+           WHEN bool_or(ra.status = 'aguardando_aprovacao') THEN 'aguardando_aprovacao'::public.request_status
+           WHEN bool_or(ra.status = 'em_analise') THEN 'em_analise'::public.request_status
+           ELSE 'recebida'::public.request_status
+         END
+       FROM public.request_areas ra
+       WHERE ra.request_id = OLD.id
+     ) THEN
+    RAISE EXCEPTION 'O status geral deve corresponder ao status calculado a partir das áreas responsáveis.';
   END IF;
 
   NEW.updated_at := now();
