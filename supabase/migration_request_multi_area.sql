@@ -142,6 +142,133 @@ CREATE TRIGGER request_areas_validate_assignment
   BEFORE INSERT OR UPDATE ON public.request_areas
   FOR EACH ROW
   EXECUTE FUNCTION public.validate_request_area_assignment();
+-- 4.1. Serializa alterações nas atribuições da mesma solicitação.
+-- Também impede transferir uma atribuição para outra solicitação.
+CREATE OR REPLACE FUNCTION public.guard_request_area_integrity()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $function$
+DECLARE
+  v_request_id uuid;
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    v_request_id := OLD.request_id;
+  ELSE
+    v_request_id := NEW.request_id;
+  END IF;
+
+  IF TG_OP = 'UPDATE'
+     AND NEW.request_id IS DISTINCT FROM OLD.request_id THEN
+    RAISE EXCEPTION 'Não é permitido transferir uma atribuição para outra solicitação.';
+  END IF;
+
+  -- A exclusão em cascata já está subordinada à exclusão do registro pai.
+  -- Nas operações normais, o bloqueio serializa alterações por solicitação.
+  IF TG_OP <> 'DELETE' OR pg_trigger_depth() = 1 THEN
+    PERFORM 1
+    FROM public.requests r
+    WHERE r.id = v_request_id
+    FOR UPDATE;
+
+    IF NOT FOUND AND TG_OP <> 'DELETE' THEN
+      RAISE EXCEPTION 'Solicitação não encontrada para a atribuição.';
+    END IF;
+  END IF;
+
+  IF TG_OP = 'DELETE' THEN
+    RETURN OLD;
+  END IF;
+
+  RETURN NEW;
+END;
+$function$;
+
+DROP TRIGGER IF EXISTS request_areas_integrity_guard
+  ON public.request_areas;
+
+CREATE TRIGGER request_areas_integrity_guard
+  BEFORE INSERT OR UPDATE OR DELETE ON public.request_areas
+  FOR EACH ROW
+  EXECUTE FUNCTION public.guard_request_area_integrity();
+
+-- 4.2. Verifica ao final da transação se a solicitação continua com uma área.
+-- A validação diferida permite substituir uma atribuição na mesma transação
+-- e permite excluir a solicitação inteira com suas áreas em cascata.
+CREATE OR REPLACE FUNCTION public.ensure_request_has_area()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $function$
+DECLARE
+  v_request_id uuid;
+  v_primary_count integer;
+  v_primary_matches_legacy boolean;
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    v_request_id := OLD.request_id;
+  ELSE
+    v_request_id := NEW.request_id;
+  END IF;
+
+  -- A exclusão integral da solicitação não exige atribuições remanescentes.
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.requests r
+    WHERE r.id = v_request_id
+  ) THEN
+    RETURN NULL;
+  END IF;
+
+  SELECT
+    count(*) FILTER (WHERE ra.is_primary),
+    COALESCE(
+      bool_or(
+        ra.is_primary
+        AND ra.area_id = r.area_id
+        AND ra.owner_id = r.owner_id
+      ),
+      false
+    )
+  INTO v_primary_count, v_primary_matches_legacy
+  FROM public.requests r
+  LEFT JOIN public.request_areas ra
+    ON ra.request_id = r.id
+  WHERE r.id = v_request_id
+  GROUP BY r.id;
+
+  IF NOT FOUND THEN
+    RETURN NULL;
+  END IF;
+
+  IF v_primary_count <> 1 OR NOT v_primary_matches_legacy THEN
+    RAISE EXCEPTION
+      'A solicitação deve manter exatamente uma área principal, compatível com os campos legados.';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.request_areas ra
+    WHERE ra.request_id = v_request_id
+  ) THEN
+    RAISE EXCEPTION
+      'A solicitação precisa manter ao menos uma área responsável.';
+  END IF;
+
+  RETURN NULL;
+END;
+$function$;
+
+DROP TRIGGER IF EXISTS request_areas_require_assignment
+  ON public.request_areas;
+
+CREATE CONSTRAINT TRIGGER request_areas_require_assignment
+  AFTER INSERT OR UPDATE OR DELETE ON public.request_areas
+  DEFERRABLE INITIALLY DEFERRED
+  FOR EACH ROW
+  EXECUTE FUNCTION public.ensure_request_has_area();
 
 -- 4. Toda solicitação nova recebe automaticamente uma atribuição primária.
 -- Isso mantém compatibilidade de criação durante a transição da interface.
@@ -220,11 +347,13 @@ CREATE TRIGGER request_areas_sync_request_status
   FOR EACH ROW
   EXECUTE FUNCTION public.sync_request_status_from_areas();
 
+DROP TRIGGER IF EXISTS trg_set_request_completed_at ON public.requests;
+
 -- 6. Impede alteração manual do status geral quando a solicitação já é multiarea.
--- A sincronização interna usa a configuração transacional app.sync_request_status.
 CREATE OR REPLACE FUNCTION public.guard_request_updates()
 RETURNS trigger
 LANGUAGE plpgsql
+SECURITY DEFINER
 SET search_path = ''
 AS $$
 BEGIN
@@ -242,6 +371,35 @@ BEGIN
        OR NEW.deleted_at IS DISTINCT FROM OLD.deleted_at THEN
       RAISE EXCEPTION 'Somente gestores podem alterar os dados administrativos da solicitação.';
     END IF;
+  END IF;
+
+  -- Mantém os campos legados sincronizados com a atribuição principal.
+  -- A validação só ocorre quando área ou responsável forem alterados.
+  IF (
+    NEW.area_id IS DISTINCT FROM OLD.area_id
+    OR NEW.owner_id IS DISTINCT FROM OLD.owner_id
+  ) AND EXISTS (
+    SELECT 1
+    FROM public.request_areas ra
+    WHERE ra.request_id = OLD.id
+  ) AND (
+    (
+      SELECT count(*)
+      FROM public.request_areas ra
+      WHERE ra.request_id = OLD.id
+        AND ra.is_primary = true
+    ) <> 1
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.request_areas ra
+      WHERE ra.request_id = OLD.id
+        AND ra.is_primary = true
+        AND ra.area_id = NEW.area_id
+        AND ra.owner_id = NEW.owner_id
+    )
+  ) THEN
+    RAISE EXCEPTION
+      'A área e o responsável devem corresponder à atribuição principal da solicitação.';
   END IF;
 
   IF NEW.status IS DISTINCT FROM OLD.status
@@ -367,8 +525,10 @@ BEGIN
     RAISE EXCEPTION 'Usuário inativo ou não autenticado.';
   END IF;
 
-  IF NULLIF(btrim(p_title), '') IS NULL OR p_due_date IS NULL THEN
-    RAISE EXCEPTION 'Informe o título e o prazo da solicitação.';
+  IF NULLIF(btrim(p_title), '') IS NULL
+     OR p_due_date IS NULL
+     OR p_priority IS NULL THEN
+    RAISE EXCEPTION 'Informe o título, a prioridade e o prazo da solicitação.';
   END IF;
 
   IF p_area_ids IS NULL OR p_owner_ids IS NULL
@@ -438,6 +598,15 @@ DECLARE
 BEGIN
   IF NOT public.is_manager() THEN
     RAISE EXCEPTION 'Somente gestores podem adicionar áreas ou reatribuir responsáveis.';
+  END IF;
+
+  PERFORM 1
+  FROM public.requests r
+  WHERE r.id = p_request_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Solicitação não encontrada.';
   END IF;
 
   SELECT COALESCE(bool_or(ra.is_primary), false)
@@ -634,6 +803,10 @@ GRANT EXECUTE ON FUNCTION public.assign_request_area(uuid, uuid, uuid, boolean)
   TO authenticated;
 
 REVOKE ALL PRIVILEGES ON FUNCTION public.validate_request_area_assignment()
+  FROM PUBLIC, anon, authenticated;
+REVOKE ALL PRIVILEGES ON FUNCTION public.guard_request_area_integrity()
+  FROM PUBLIC, anon, authenticated;
+REVOKE ALL PRIVILEGES ON FUNCTION public.ensure_request_has_area()
   FROM PUBLIC, anon, authenticated;
 REVOKE ALL PRIVILEGES ON FUNCTION public.create_primary_request_area()
   FROM PUBLIC, anon, authenticated;

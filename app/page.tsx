@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import type { Session, User } from "@supabase/supabase-js";
@@ -65,8 +65,6 @@ export default function Home() {
   const [areas,setAreas] = useState<Area[]>([]);
   const [tasks,setTasks] = useState<Task[]>([]);
   const [members,setMembers] = useState<Profile[]>([]);
-  const [areaMembers,setAreaMembers] = useState<AreaMember[]>([]);
-  const [selectedAreaMembers,setSelectedAreaMembers] = useState<AreaMember[]>([]);
   const [formAreaIds,setFormAreaIds] = useState<string[]>([]);
   const [formOwners,setFormOwners] = useState<Record<string,string>>({});
   const [formMembersByArea,setFormMembersByArea] = useState<Record<string,AreaMember[]>>({});
@@ -116,9 +114,10 @@ export default function Home() {
   const [deletingTask,setDeletingTask] = useState(false);
   const [completeConfirm,setCompleteConfirm] = useState(false);
   const [pendingTaskUpdate,setPendingTaskUpdate] = useState<{task:Task;patch:Partial<Task>}|null>(null);
+  const [pendingAreaStatus,setPendingAreaStatus] = useState<{task:Task;assignment:AreaAssignment;nextStatus:Status}|null>(null);
   const [memberForm,setMemberForm] = useState({full_name:"",role:"colaborador" as Profile["role"],area_ids:[] as string[],active:true,stock_manager:false});
   const [saving,setSaving] = useState(false);
-  const [form,setForm] = useState({title:"",areaId:"",ownerId:"",priority:"Média" as Priority,due:"",description:""});
+  const [form,setForm] = useState({title:"",priority:"Média" as Priority,due:"",description:""});
   const isManager = profile?.role === "admin" || profile?.role === "gestor";
   const canManageStock = profile?.role === "admin" || profile?.stock_manager === true;
 
@@ -381,7 +380,7 @@ export default function Home() {
   },[profile?.id,tasks,refreshUnreadCounts]);
 
   useEffect(() => {
-    if (!selected) setPendingTaskUpdate(null);
+    if (!selected) { setPendingTaskUpdate(null); setPendingAreaStatus(null); }
   },[selected]);
 
   useEffect(() => {
@@ -543,40 +542,12 @@ export default function Home() {
   useEffect(() => { setListPage("orderItems",1); setListPage("orderHistory",1); },[selectedMaterialOrder]);
   useEffect(() => { setListPage("memberTasks",1); },[selectedMember?.id]);
   useEffect(() => { setListPagination(old=>Object.fromEntries(Object.entries(old).map(([key,value])=>[key,{...value,page:1}]))); },[search,requestUserFilter,scheduleOwnerFilter,scheduleAreaFilter,scheduleStatusFilter,schedulePeriod,scheduleStartDate,scheduleEndDate,stockSearch,stockReportMaterial,stockReportType,stockReportStart,stockReportEnd,reportDateMode,reportPeriod,reportStartDate,reportEndDate,reportAreaFilter,reportOwnerFilter,reportStatusFilter,auditSearch,auditActorFilter,auditModuleFilter,auditActionFilter,auditStartDate,auditEndDate,memberTaskStatus,ordersStartDate,ordersEndDate]);
-  useEffect(() => { if (areas.length && !form.areaId) setForm(old=>({...old,areaId:areas[0].id})); },[areas,form.areaId]);
 
-  useEffect(() => {
-    let active = true;
-    async function loadAreaMembers() {
-      if (!supabase || !form.areaId) {
-        setAreaMembers([]);
-        return;
-      }
-      setAreaMembers([]);
-      setForm(old => old.areaId === form.areaId ? { ...old, ownerId: "" } : old);
-      const { data, error } = await supabase.rpc("get_area_members", { target_area: form.areaId });
-      if (!active) return;
-      if (error) {
-        setAreaMembers([]);
-        setDataError(`Não foi possível carregar os responsáveis da área: ${error.message}`);
-        return;
-      }
-      const available = (data || []) as AreaMember[];
-      setAreaMembers(available);
-      setForm(old => {
-        if (old.areaId !== form.areaId) return old;
-        if (available.length === 1) return { ...old, ownerId: available[0].profile_id };
-        return { ...old, ownerId: "" };
-      });
-    }
-    loadAreaMembers();
-    return () => { active = false; };
-  }, [form.areaId]);
 
   useEffect(() => {
     let active = true;
     async function loadSelectedAreaMembers() {
-      if (!supabase || !selected || !isManager) { setSelectedAreaMembers([]); setDetailMembersByArea({}); return; }
+      if (!supabase || !selected || !isManager) { setDetailMembersByArea({}); return; }
       const client = supabase;
       const entries = await Promise.all(selected.areaAssignments.map(async assignment => {
         const {data,error}=await client.rpc("get_area_members",{target_area:assignment.areaId});
@@ -584,16 +555,12 @@ export default function Home() {
         return [assignment.areaId,(data||[]) as AreaMember[]] as const;
       }));
       if (!active) return;
-      const map=Object.fromEntries(entries); setDetailMembersByArea(map); setSelectedAreaMembers(map[selected.areaId]||[]);
+      const map=Object.fromEntries(entries); setDetailMembersByArea(map);
     }
     loadSelectedAreaMembers().catch(error=>{if(active)setDataError(`Não foi possível carregar os responsáveis das áreas: ${error.message}`);});
     return () => { active = false; };
   }, [selected?.id, isManager]);
 
-  useEffect(() => {
-    if (!showNew) return;
-    setFormAreaIds(old=>old.length?old:(form.areaId?[form.areaId]:[]));
-  },[showNew]);
 
   async function signIn(e:FormEvent) {
     e.preventDefault(); if (!supabase) return;
@@ -959,7 +926,7 @@ export default function Home() {
     if(ownerIds.some((id,index)=>!(formMembersByArea[formAreaIds[index]]||[]).some(m=>m.profile_id===id))){setDataError("Há responsável que não pertence à área selecionada.");return;}
     setSaving(true);setDataError("");
     const {error}=await supabase.rpc("create_request_with_areas",{p_title:form.title.trim(),p_description:form.description.trim()||null,p_area_ids:formAreaIds,p_owner_ids:ownerIds,p_priority:priorityToDb[form.priority],p_due_date:form.due});
-    if(error)setDataError(error.message);else{setShowNew(false);setForm({title:"",areaId:"",ownerId:"",priority:"Média",due:"",description:""});setFormAreaIds([]);setFormOwners({});setFormMembersByArea({});if(session?.user)await loadData(session.user);}
+    if(error)setDataError(error.message);else{setShowNew(false);setForm({title:"",priority:"Média",due:"",description:""});setFormAreaIds([]);setFormOwners({});setFormMembersByArea({});if(session?.user)await loadData(session.user);}
     setSaving(false);
   }
   function openNewMaterial() {
@@ -1195,7 +1162,7 @@ export default function Home() {
     if(!supabase||!profile)return;
     if(!isManager&&(assignment.ownerId!==profile.id||task.requesterId===profile.id)){setDataError("Somente o responsável da área pode atualizar seu status. O solicitante não pode alterar o status da própria solicitação.");return;}
     const {error}=await supabase.from("request_areas").update({status:statusToDb[nextStatus]}).eq("request_id",task.id).eq("area_id",assignment.areaId);
-    if(error){setDataError(error.message);return;}setDataError("");if(session?.user)await loadData(session.user);
+    if(error){setDataError(error.message);return;}setPendingAreaStatus(null);setDataError("");if(session?.user)await loadData(session.user);
   }
 
   if (authLoading) return <div className="authScreen"><div className="authCard"><div className="brandMark"><Layers size={22}/></div><h1>Gestão de Demandas DelRio</h1><p>Verificando sua sessão...</p></div></div>;
@@ -1819,7 +1786,21 @@ export default function Home() {
         <div style={{maxHeight:"48vh",overflowY:"auto",width:"100%"}}><TaskTable tasks={pageItems("memberTasks",visibleMemberTasks)} onSelect={task=>{setSelectedMember(null);setSelected(task)}} unreadCounts={unreadCounts}/><Pagination {...paginationProps("memberTasks",visibleMemberTasks.length)}/></div>
       </div>
     </div></div>}
-    {selected&&<div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setSelected(null)}}><div className="modal requestDetailModal"><div className="modalHead"><div><p className="eyebrow">PROTOCOLO #{selected.protocol}</p><h2>{selected.title}</h2><p>{selected.area} · Aberta em {new Date(selected.created+"T12:00:00").toLocaleDateString("pt-BR")}</p></div><button className="iconButton" onClick={()=>setSelected(null)}><X/></button></div><div className="detailGrid"><div><small>Áreas responsáveis</small><b>{selected.areaAssignments.map(a=>a.area).join(" · ")||selected.area}</b></div><div><small>Prazo</small><b>{new Date(selected.due+"T12:00:00").toLocaleDateString("pt-BR")}</b></div><div><small>Prioridade</small><b>{selected.priority}</b></div><div><small>Status geral</small><StatusBadge status={selected.status}/></div></div><div style={{display:"grid",gap:12,marginTop:16}}><h3 style={{margin:"4px 0"}}>Acompanhamento por área</h3>{selected.areaAssignments.map(assignment=><div key={assignment.areaId} style={{border:"1px solid #e5e1eb",borderRadius:12,padding:14,display:"grid",gap:8}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap"}}><b>{assignment.area}</b><StatusBadge status={assignment.status}/></div><div style={{fontSize:13,color:"#667085"}}>Responsável: <b>{assignment.owner}</b>{assignment.isPrimary?" · Área principal":""}</div>{isManager&&<label>Reatribuir responsável<select value={assignment.ownerId} onChange={e=>void reassignAreaOwner(selected,assignment,e.target.value)}>{(detailMembersByArea[assignment.areaId]||[]).map(m=><option key={m.profile_id} value={m.profile_id}>{m.full_name}</option>)}</select></label>}{(isManager||(assignment.ownerId===profile?.id&&selected.requesterId!==profile?.id))?<label>Atualizar status desta área<select value={assignment.status} onChange={e=>void updateAreaStatus(selected,assignment,e.target.value as Status)}>{(["Recebida","Em análise","Aguardando aprovação","Em execução","Concluída","Cancelada"] as Status[]).map(s=><option key={s}>{s}</option>)}</select></label>:null}</div>)}</div><p className="description">{selected.description||"Sem descrição adicional."}</p>
+    {selected&&<div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setSelected(null)}}><div className="modal requestDetailModal"><div className="modalHead"><div><p className="eyebrow">PROTOCOLO #{selected.protocol}</p><h2>{selected.title}</h2><p>{selected.area} · Aberta em {new Date(selected.created+"T12:00:00").toLocaleDateString("pt-BR")}</p></div><button className="iconButton" onClick={()=>setSelected(null)}><X/></button></div><div className="detailGrid"><div><small>Áreas responsáveis</small><b>{selected.areaAssignments.map(a=>a.area).join(" · ")||selected.area}</b></div><div><small>Prazo</small><b>{new Date(selected.due+"T12:00:00").toLocaleDateString("pt-BR")}</b></div><div><small>Prioridade</small><b>{selected.priority}</b></div><div><small>Status geral</small><StatusBadge status={selected.status}/></div></div><div style={{display:"grid",gap:12,marginTop:16}}><h3 style={{margin:"4px 0"}}>Acompanhamento por área</h3>{selected.areaAssignments.map(assignment=><div key={assignment.areaId} style={{border:"1px solid #e5e1eb",borderRadius:12,padding:14,display:"grid",gap:8}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap"}}><b>{assignment.area}</b><StatusBadge status={assignment.status}/></div><div style={{fontSize:13,color:"#667085"}}>Responsável: <b>{assignment.owner}</b>{assignment.isPrimary?" · Área principal":""}</div>{isManager&&<label>Reatribuir responsável<select value={assignment.ownerId} onChange={e=>void reassignAreaOwner(selected,assignment,e.target.value)}>{(detailMembersByArea[assignment.areaId]||[]).map(m=><option key={m.profile_id} value={m.profile_id}>{m.full_name}</option>)}</select></label>}{(isManager||(assignment.ownerId===profile?.id&&selected.requesterId!==profile?.id))?<label>Atualizar status desta área<select value={pendingAreaStatus?.task.id===selected.id&&pendingAreaStatus.assignment.areaId===assignment.areaId?pendingAreaStatus.nextStatus:assignment.status} onChange={e=>{const nextStatus=e.target.value as Status;if(nextStatus===assignment.status){setPendingAreaStatus(null);return;}setPendingAreaStatus({task:selected,assignment,nextStatus});}}>{(["Recebida","Em análise","Aguardando aprovação","Em execução","Concluída","Cancelada"] as Status[]).map(s=><option key={s}>{s}</option>)}</select></label>:null}</div>)}</div><p className="description">{selected.description||"Sem descrição adicional."}</p>
+      {pendingAreaStatus&&pendingAreaStatus.task.id===selected.id&&<div style={{padding:14,marginTop:14,border:"1px solid #d9c5f0",background:"#fbf8ff",borderRadius:10}}>
+        <b style={{color:"#54218a"}}>{"Confirmar altera\u00e7\u00e3o do status?"}</b>
+        <p style={{margin:"7px 0 12px",fontSize:13,color:"#5f5b6b"}}>{"Confira a mudan\u00e7a antes de salvar."}</p>
+        <div style={{display:"grid",gap:5,marginBottom:14,fontSize:13,color:"#454253"}}>
+          <div><b>{"\u00c1rea:"}</b> {pendingAreaStatus.assignment.area}</div>
+          <div><b>{"Respons\u00e1vel:"}</b> {pendingAreaStatus.assignment.owner}</div>
+          <div><b>Status atual:</b> {pendingAreaStatus.assignment.status}</div>
+          <div><b>Novo status:</b> {pendingAreaStatus.nextStatus}</div>
+        </div>
+        <div className="modalActions" style={{marginTop:0}}>
+          <button className="secondary" onClick={()=>setPendingAreaStatus(null)}>Cancelar</button>
+          <button className="primary" onClick={()=>void updateAreaStatus(pendingAreaStatus.task,pendingAreaStatus.assignment,pendingAreaStatus.nextStatus)}>Confirmar e salvar</button>
+        </div>
+      </div>}
       {pendingTaskUpdate&&pendingTaskUpdate.task.id===selected.id&&<div style={{padding:14,marginTop:14,border:"1px solid #d9c5f0",background:"#fbf8ff",borderRadius:10}}><b style={{color:"#54218a"}}>Confirmar alteração?</b><p style={{margin:"7px 0 12px",fontSize:13,color:"#5f5b6b"}}>Confira a mudança antes de salvar e fechar a solicitação.</p><div style={{display:"grid",gap:5,marginBottom:14,fontSize:13,color:"#454253"}}>{pendingTaskUpdate.patch.status&&<div><b>Status:</b> {pendingTaskUpdate.task.status} → {pendingTaskUpdate.patch.status}</div>}{pendingTaskUpdate.patch.priority&&<div><b>Prioridade:</b> {pendingTaskUpdate.task.priority} → {pendingTaskUpdate.patch.priority}</div>}{pendingTaskUpdate.patch.ownerId!==undefined&&<div><b>Responsável:</b> {pendingTaskUpdate.task.owner} → {pendingTaskUpdate.patch.ownerId?members.find(member=>member.id===pendingTaskUpdate.patch.ownerId)?.full_name||"Responsável selecionado":"Não atribuído"}</div>}</div><div className="modalActions" style={{marginTop:0}}><button className="secondary" onClick={()=>setPendingTaskUpdate(null)}>Cancelar</button><button className="primary" onClick={()=>void updateTask(pendingTaskUpdate.task,pendingTaskUpdate.patch)}>Confirmar, salvar e fechar</button></div></div>}
       <p className="notice">O status geral é atualizado automaticamente conforme o andamento das áreas responsáveis.</p>{isManager&&<><label>Prioridade<select value={selected.priority} onChange={e=>setPendingTaskUpdate({task:selected,patch:{priority:e.target.value as Priority}})}>{(["Baixa","Média","Alta","Urgente"] as Priority[]).map(s=><option key={s}>{s}</option>)}</select></label></>}{(isManager || selected.requesterId===profile?.id)&&<div style={{marginTop:18}}>
       {deleteConfirm ? <div style={{padding:14,border:"1px solid #fecaca",background:"#fff7f7",borderRadius:10}}>
