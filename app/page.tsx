@@ -1740,6 +1740,11 @@ export default function Home() {
           </section>
         </>}
       </div>
+        <footer className="appFooter">
+          <span>© 2026 DelRio. Todos os direitos reservados.</span>
+          <span><strong>Gestão de Demandas de Marketing</strong> · Sistema interno · Versão 1.0.0</span>
+          <span>Developed by: Johnata Paiva</span>
+        </footer>
     </section>
     {selectedAuditLog&&<div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setSelectedAuditLog(null)}}><div className="modal" style={{width:"min(760px,94vw)",maxHeight:"86vh",overflowY:"auto",boxSizing:"border-box"}}><div className="modalHead"><div><p className="eyebrow">DETALHES DA AUDITORIA</p><h2>{selectedAuditLog.action==="INSERT"?"Inclusão":selectedAuditLog.action==="UPDATE"?"Alteração":"Exclusão"} · {selectedAuditLog.table_name.replaceAll("_"," ")}</h2><p>{new Date(selectedAuditLog.created_at).toLocaleString("pt-BR")}</p></div><button className="iconButton" onClick={()=>setSelectedAuditLog(null)} aria-label="Fechar detalhes"><X/></button></div><div className="detailGrid" style={{marginBottom:18}}><div><small>Colaborador</small><b>{selectedAuditLog.actor_name||"Sistema"}</b></div><div><small>E-mail</small><b>{selectedAuditLog.actor_email||"Ação automática"}</b></div><div style={{gridColumn:"1 / -1"}}><small>Registro</small><b style={{fontFamily:"monospace",fontSize:11,overflowWrap:"anywhere"}}>{selectedAuditLog.record_id||"—"}</b></div></div><div style={{display:"grid",gap:10}}>{(()=>{const oldValues=selectedAuditLog.old_values||{};const newValues=selectedAuditLog.new_values||{};const keys=[...new Set([...Object.keys(oldValues),...Object.keys(newValues)])].filter(key=>!["created_at","updated_at"].includes(key));const visibleKeys=(selectedAuditLog.action==="INSERT"?Object.keys(newValues):selectedAuditLog.action==="DELETE"?Object.keys(oldValues):keys.filter(key=>JSON.stringify(oldValues[key])!==JSON.stringify(newValues[key]))).filter(key=>!["created_at","updated_at"].includes(key));const displayValue=(value:any)=>value===null||value===undefined?"—":typeof value==="object"?JSON.stringify(value):String(value);return visibleKeys.length?visibleKeys.map(key=><div key={key} style={{padding:"12px 14px",border:"1px solid #e8e3ef",borderRadius:11,background:"#fcfbfe",display:"grid",gap:7}}><b style={{fontSize:12,color:"#4b3b5f",textTransform:"capitalize"}}>{key.replaceAll("_"," ")}</b>{selectedAuditLog.action==="INSERT"?<div style={{fontSize:13,color:"#454253",overflowWrap:"anywhere"}}><span style={{color:"#7a1bd8",fontWeight:700}}>Novo valor:</span> {displayValue(newValues[key])}</div>:selectedAuditLog.action==="DELETE"?<div style={{fontSize:13,color:"#454253",overflowWrap:"anywhere"}}><span style={{color:"#b42318",fontWeight:700}}>Valor removido:</span> {displayValue(oldValues[key])}</div>:<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:8}}><div style={{padding:10,borderRadius:8,background:"#f3f3f6",fontSize:13,overflowWrap:"anywhere"}}><small style={{display:"block",color:"#777486",fontWeight:700,marginBottom:4}}>ANTERIOR</small>{displayValue(oldValues[key])}</div><div style={{padding:10,borderRadius:8,background:"#f5edff",fontSize:13,overflowWrap:"anywhere"}}><small style={{display:"block",color:"#7a1bd8",fontWeight:700,marginBottom:4}}>NOVO</small>{displayValue(newValues[key])}</div></div>}</div>):<div className="auditEmpty">Não há campos detalhados neste registro.</div>})()}</div><div className="modalActions"><button className="secondary" onClick={()=>setSelectedAuditLog(null)}>Fechar</button></div></div></div>}
     {showNewMaterialOrder&&<div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setShowNewMaterialOrder(false)}}><div className="modal orderModal" style={{maxWidth:760}}>
@@ -1899,11 +1904,6 @@ export default function Home() {
       </section>
 
       {dataError&&<div className="errorBox" style={{marginTop:12}}>{dataError}</div>}
-        <footer className="appFooter">
-          <span>© 2026 DelRio. Todos os direitos reservados.</span>
-          <span><strong>Gestão de Demandas de Marketing</strong> · Sistema interno · Versão 1.0.0</span>
-          <span>Developed by: Johnata Paiva</span>
-        </footer>
       </div></div>}
   </main>;
 }
