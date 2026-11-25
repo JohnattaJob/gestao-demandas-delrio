@@ -61,6 +61,14 @@ export default function Home() {
   const [password,setPassword] = useState("");
   const [loginLoading,setLoginLoading] = useState(false);
   const [loginError,setLoginError] = useState("");
+  const [forgotPasswordMode,setForgotPasswordMode] = useState(false);
+  const [passwordRecoveryMode,setPasswordRecoveryMode] = useState(false);
+  const [recoveryEmailSent,setRecoveryEmailSent] = useState(false);
+  const [recoveryMessage,setRecoveryMessage] = useState("");
+  const [recoveryError,setRecoveryError] = useState("");
+  const [newPassword,setNewPassword] = useState("");
+  const [confirmNewPassword,setConfirmNewPassword] = useState("");
+  const [recoveryLoading,setRecoveryLoading] = useState(false);
   const [profile,setProfile] = useState<Profile|null>(null);
   const [areas,setAreas] = useState<Area[]>([]);
   const [tasks,setTasks] = useState<Task[]>([]);
@@ -182,7 +190,7 @@ export default function Home() {
   useEffect(() => {
     if (!supabase) { setAuthLoading(false); setLoginError("As variáveis do Supabase não foram encontradas. Confira o arquivo .env.local e reinicie o servidor."); return; }
     supabase.auth.getSession().then(({data}) => { setSession(data.session); setAuthLoading(false); });
-    const { data: listener } = supabase.auth.onAuthStateChange((_event,nextSession) => { setSession(nextSession); setProfile(null); });
+    const { data: listener } = supabase.auth.onAuthStateChange((event,nextSession) => { setSession(nextSession); setProfile(null); if(event === "PASSWORD_RECOVERY"){setPasswordRecoveryMode(true);setForgotPasswordMode(false);setRecoveryError("");setRecoveryMessage("");} });
     return () => listener.subscription.unsubscribe();
   },[]);
 
@@ -569,6 +577,25 @@ export default function Home() {
     const {error} = await supabase.auth.signInWithPassword({email:email.trim(),password});
     if (error) setLoginError(error.message === "Invalid login credentials" ? "E-mail ou senha incorretos." : error.message);
     setLoginLoading(false);
+  }
+  async function requestPasswordReset(e:FormEvent) {
+    e.preventDefault(); if(!supabase)return;
+    setRecoveryLoading(true);setRecoveryError("");setRecoveryMessage("");
+    const {error}=await supabase.auth.resetPasswordForEmail(email.trim(),{redirectTo:window.location.origin});
+    if(error)setRecoveryError("Não foi possível enviar o e-mail agora. Tente novamente em instantes.");
+    else setRecoveryEmailSent(true);
+    setRecoveryLoading(false);
+  }
+  async function updatePassword(e:FormEvent) {
+    e.preventDefault();if(!supabase)return;
+    setRecoveryError("");setRecoveryMessage("");
+    if(newPassword.length<8){setRecoveryError("A nova senha deve ter pelo menos 8 caracteres.");return;}
+    if(newPassword!==confirmNewPassword){setRecoveryError("As senhas não coincidem.");return;}
+    setRecoveryLoading(true);
+    const {error}=await supabase.auth.updateUser({password:newPassword});
+    if(error)setRecoveryError("Não foi possível atualizar a senha. Solicite um novo link de recuperação.");
+    else {setPasswordRecoveryMode(false);setForgotPasswordMode(false);setNewPassword("");setConfirmNewPassword("");setRecoveryMessage("Senha redefinida com sucesso. Você já pode entrar com sua nova senha.");await supabase.auth.signOut();setPassword("");}
+    setRecoveryLoading(false);
   }
   async function signOut() { if (supabase) await supabase.auth.signOut(); setTasks([]); setMembers([]); setProfile(null); }
 
@@ -1168,7 +1195,8 @@ export default function Home() {
   }
 
   if (authLoading) return <div className="authScreen"><div className="authCard"><div className="brandMark"><Layers size={22}/></div><h1>Gestão de Demandas DelRio</h1><p>Verificando sua sessão...</p></div></div>;
-  if (!session) return <div className="authScreen"><form className="authCard" onSubmit={signIn}><div className="authBrand"><div className="brandMark"><Layers size={22}/></div><div><b>DELRIO</b><small>GESTÃO DE DEMANDAS</small></div></div><p className="eyebrow">AMBIENTE DE MARKETING</p><h1>Acesse sua conta</h1><p className="authSub">Entre com seu e-mail e senha cadastrados no sistema.</p><label>E-mail<input type="email" autoComplete="username" value={email} onChange={e=>setEmail(e.target.value)} placeholder="seuemail@delrio.com.br" required/></label><label>Senha<input type="password" autoComplete="current-password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Digite sua senha" required/></label>{loginError&&<div className="errorBox">{loginError}</div>}<button className="primary authSubmit" disabled={loginLoading}>{loginLoading?"Entrando...":"Entrar"}</button><small className="authFoot">Acesso restrito à equipe autorizada.</small></form></div>;
+  if(passwordRecoveryMode) return <div className="authScreen"><form className="authCard" onSubmit={updatePassword}><div className="authBrand"><div className="brandMark"><Layers size={22}/></div><div><b>DELRIO</b><small>GESTÃO DE DEMANDAS</small></div></div><p className="eyebrow">RECUPERAÇÃO DE ACESSO</p><h1>Defina sua nova senha</h1><p className="authSub">Escolha uma senha com pelo menos 8 caracteres.</p><label>Nova senha<input type="password" autoComplete="new-password" value={newPassword} onChange={e=>setNewPassword(e.target.value)} placeholder="Digite a nova senha" minLength={8} required/></label><label>Confirmar nova senha<input type="password" autoComplete="new-password" value={confirmNewPassword} onChange={e=>setConfirmNewPassword(e.target.value)} placeholder="Digite novamente a nova senha" minLength={8} required/></label>{recoveryError&&<div className="errorBox">{recoveryError}</div>}<button className="primary authSubmit" disabled={recoveryLoading}>{recoveryLoading?"Salvando...":"Redefinir senha"}</button></form></div>;
+  if (!session) return <div className="authScreen"><form className="authCard" onSubmit={forgotPasswordMode?requestPasswordReset:signIn}><div className="authBrand"><div className="brandMark"><Layers size={22}/></div><div><b>DELRIO</b><small>GESTÃO DE DEMANDAS</small></div></div><p className="eyebrow">AMBIENTE DE MARKETING</p><h1>{forgotPasswordMode?"Recuperar senha":"Acesse sua conta"}</h1><p className="authSub">{forgotPasswordMode?"Informe seu e-mail cadastrado para receber o link de redefinição.":"Entre com seu e-mail e senha cadastrados no sistema."}</p><label>E-mail<input type="email" autoComplete="username" value={email} onChange={e=>{setEmail(e.target.value);setRecoveryEmailSent(false);setRecoveryError("");}} placeholder="seuemail@delrio.com.br" required/></label>{!forgotPasswordMode&&<label>Senha<input type="password" autoComplete="current-password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Digite sua senha" required/></label>}{loginError&&!forgotPasswordMode&&<div className="errorBox">{loginError}</div>}{recoveryError&&<div className="errorBox">{recoveryError}</div>}{recoveryEmailSent&&<div className="successBox">Se o endereço estiver cadastrado, você receberá um e-mail com as instruções para redefinir sua senha.</div>}{!forgotPasswordMode?<button type="button" className="textButton" onClick={()=>{setForgotPasswordMode(true);setLoginError("");setRecoveryError("");}}>Esqueci minha senha</button>:<button className="primary authSubmit" disabled={recoveryLoading}>{recoveryLoading?"Enviando...":"Enviar link de recuperação"}</button>}{forgotPasswordMode&&<button type="button" className="textButton" onClick={()=>{setForgotPasswordMode(false);setRecoveryEmailSent(false);setRecoveryError("");}}>Voltar para o login</button>}{!forgotPasswordMode&&<button className="primary authSubmit" disabled={loginLoading}>{loginLoading?"Entrando...":"Entrar"}</button>}<small className="authFoot">Acesso restrito à equipe autorizada.</small></form></div>;
 
   const nav = [["Dashboard",LayoutDashboard],["Solicitações",ClipboardList],["Pedidos de Materiais",ClipboardCheck],["Cronograma",CalendarDays],["Colaboradores",Users],["Estoque",Package],["Relatórios",BarChart3],["Configurações",Settings],...(profile?.role === "admin" ? [["Auditoria",ShieldCheck] as const] : [])] as const;
   const auditActors = [...new Set(auditLogs.map(log=>log.actor_name || "Sistema"))].sort((a,b)=>a.localeCompare(b,"pt-BR"));
