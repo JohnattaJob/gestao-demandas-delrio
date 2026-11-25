@@ -75,6 +75,7 @@ export default function Home() {
   const [stockSection,setStockSection] = useState<"materiais"|"alertas"|"consumo">("materiais");
   const [search,setSearch] = useState("");
   const [requestUserFilter,setRequestUserFilter] = useState("Todos");
+  const [requestStatusFilter,setRequestStatusFilter] = useState<Status|"Todos">("Todos");
   const [scheduleOwnerFilter,setScheduleOwnerFilter] = useState("Todos");
   const [scheduleAreaFilter,setScheduleAreaFilter] = useState("Todas");
   const [scheduleStatusFilter,setScheduleStatusFilter] = useState("Todos");
@@ -576,8 +577,9 @@ export default function Home() {
     const matchesUser = requestUserFilter === "Todos"
       || (requestUserFilter === "Sem responsável" && t.areaAssignments.every(a=>!a.ownerId))
       || t.areaAssignments.some(a=>a.ownerId===requestUserFilter);
-    return matchesSearch && matchesUser;
-  }),[tasks,search,requestUserFilter]);
+    const matchesStatus = requestStatusFilter === "Todos" || t.status === requestStatusFilter;
+    return matchesSearch && matchesUser && matchesStatus;
+  }),[tasks,search,requestUserFilter,requestStatusFilter]);
   const requestUsers = useMemo(() => {
     const unique = new Map<string,string>();
     tasks.forEach(task => task.areaAssignments.forEach(a=>{if(a.ownerId)unique.set(a.ownerId,a.owner);}));
@@ -1258,7 +1260,7 @@ export default function Home() {
             .requestFilterTitle p{margin:0;font-size:12px;color:#858397}
             .requestFilterClear{border:0;background:transparent;color:#7624c7;font-size:12px;font-weight:700;padding:9px 10px;border-radius:8px;cursor:pointer;white-space:nowrap}
             .requestFilterClear:hover{background:#f5edff}
-            .requestFilterGrid{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(230px,.9fr);gap:18px;align-items:end}
+            .requestFilterGrid{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(190px,.85fr) minmax(190px,.85fr);gap:14px;align-items:end}
             .requestFilterField label{display:block;margin:0 0 9px;color:#565568;font-size:11px;font-weight:700;letter-spacing:.035em;text-transform:uppercase}
             .requestFilterControl{width:100%;height:43px;border:1px solid #e1e2ea;border-radius:10px;background:#fff;padding:0 12px;color:#292837;font-size:13px;font-weight:500;font-family:inherit;outline:none;transition:border-color .15s,box-shadow .15s;box-sizing:border-box}
             .requestFilterControl:focus{border-color:#9b5cdb;box-shadow:0 0 0 3px rgba(122,27,216,.10)}
@@ -1272,11 +1274,12 @@ export default function Home() {
           <section className="panel requestFilterCard">
             <div className="requestFilterTop">
               <div className="requestFilterTitle"><span className="requestFilterIcon"><Search size={19}/></span><div><h3>Filtros das solicitações</h3><p>Encontre demandas por palavra-chave ou responsável.</p></div></div>
-              <button type="button" className="secondary" style={{padding:"8px 12px",fontSize:12}} onClick={()=>{setSearch("");setRequestUserFilter("Todos")}}>Limpar filtros</button>
+              <button type="button" className="secondary" style={{padding:"8px 12px",fontSize:12}} onClick={()=>{setSearch("");setRequestUserFilter("Todos");setRequestStatusFilter("Todos")}}>Limpar filtros</button>
             </div>
             <div className="requestFilterGrid">
               <div className="requestFilterField"><label htmlFor="request-search">Buscar solicitações</label><div className="requestFilterSearch"><Search size={16}/><input id="request-search" className="requestFilterControl" placeholder="Título, área, responsável ou status..." value={search} onChange={e=>setSearch(e.target.value)}/></div></div>
               <div className="requestFilterField"><label htmlFor="request-user-filter">Responsável</label><select id="request-user-filter" className="requestFilterControl" value={requestUserFilter} onChange={e=>setRequestUserFilter(e.target.value)}><option value="Todos">Todos os usuários</option>{requestUsers.map(([id,name])=><option key={id} value={id}>{name}</option>)}{tasks.some(t=>t.areaAssignments.length>0&&t.areaAssignments.every(a=>!a.ownerId))&&<option value="Sem responsável">Sem responsável</option>}</select></div>
+              <div className="requestFilterField"><label htmlFor="request-status-filter">Status</label><select id="request-status-filter" className="requestFilterControl" value={requestStatusFilter} onChange={e=>setRequestStatusFilter(e.target.value as Status|"Todos")}><option value="Todos">Todos os status</option>{(["Recebida","Em análise","Aguardando aprovação","Em execução","Concluída","Cancelada"] as Status[]).map(status=><option key={status} value={status}>{status}</option>)}</select></div>
             </div>
             <div className="requestFilterBottom"><span><strong>{filtered.length}</strong> registro(s) encontrado(s)</span></div>
           </section>
