@@ -48,3 +48,20 @@
 .scheduleSelect:hover{border-color:#cbb4df}
 .scheduleSelect:focus{border-color:#9b5cdb;box-shadow:0 0 0 3px rgba(122,27,216,.10)}
 .scheduleSelect option{color:#292837;background:#fff}
+
+/* Identidade visual DelRio */
+.brandLogo {
+  display: block;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.authBrandLogo {
+  width: 150px;
+  height: 67px;
+}
+
+.sidebarBrandLogo {
+  width: 125px;
+  height: 56px;
+}
