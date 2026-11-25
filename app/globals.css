@@ -65,3 +65,33 @@
   width: 125px;
   height: 56px;
 }
+
+/* Rodapé institucional */
+.appFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  margin-top: 30px;
+  padding: 18px 34px 20px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.appFooter strong {
+  color: #55515c;
+  font-weight: 700;
+}
+
+@media(max-width:700px) {
+  .appFooter {
+    justify-content: center;
+    flex-direction: column;
+    text-align: center;
+    padding: 18px 15px 22px;
+    margin-top: 22px;
+  }
+}
