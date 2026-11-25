@@ -1780,7 +1780,7 @@ export default function Home() {
     {formAreaIds.map(areaId=>{
       const a=areas.find(x=>x.id===areaId);
       const list=formMembersByArea[areaId]||[];
-      return <div key={areaId} style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,1fr) 42px",alignItems:"end",gap:12,padding:14,border:"1px solid #e1e4ec",borderRadius:12,background:"#fff"}}>
+      return <div key={areaId} style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,1fr) 42px",alignItems:"start",gap:12,padding:14,border:"1px solid #e1e4ec",borderRadius:12,background:"#fff"}}>
         <label style={{minWidth:0}}>Área responsável
           <select value={areaId} onChange={async e=>{const nextAreaId=e.target.value;if(nextAreaId&&nextAreaId!==areaId){await toggleFormArea(areaId,false);await toggleFormArea(nextAreaId,true);}}}>
             {areas.filter(area=>area.id===areaId||!formAreaIds.includes(area.id)).map(area=><option key={area.id} value={area.id}>{area.name}</option>)}
