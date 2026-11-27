@@ -1,0 +1,39 @@
+﻿:root {
+  /* Compatibilidade com o layout atual */
+  --ink: #20242d;
+  --muted: #7d8491;
+  --line: #e9ebef;
+  --bg: #f6f7f9;
+  --purple: #7627c8;
+  --purple2: #f2eafa;
+  --white: #ffffff;
+
+  /* Identidade institucional DelRio */
+  --delrio-graphite: #252A2B;
+  --delrio-purple: #77689C;
+
+  /* Identidade digital */
+  --brand-primary: #7A1BD8;
+  --brand-primary-hover: #5B21B6;
+  --brand-dark: #171923;
+  --surface: #FFFFFF;
+  --surface-muted: #F4F4F7;
+
+  /* Tipografia */
+  --font-primary: "Lato", sans-serif;
+  --font-heading: "Lato", sans-serif;
+
+  /* Bordas */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+
+  /* Sombras */
+  --shadow-sm: 0 2px 8px rgba(23, 25, 35, 0.05);
+  --shadow-md: 0 8px 24px rgba(23, 25, 35, 0.08);
+  --shadow-lg: 0 18px 48px rgba(23, 25, 35, 0.12);
+
+  /* Transições */
+  --transition-fast: 150ms ease;
+  --transition-normal: 220ms ease;
+}

@@ -6,16 +6,26 @@ import {
   Activity, BarChart3, CalendarDays, CheckCircle2, ChevronDown, ClipboardList,
   Clock3, Download, LayoutDashboard, LogOut, Menu, Package, Plus, Search, Settings,
   Users, X, AlertTriangle, Layers, ArrowUpRight, RefreshCw, ClipboardCheck, PackageCheck, History,
-  MessageCircle, Send, Bell, ShieldCheck, FileSearch
+  MessageCircle, Send, Bell, ShieldCheck, FileSearch, ImagePlus, Upload
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import MainLayout from "@/components/layout/MainLayout";
+import Pagination from "@/components/shared/Pagination";
+import Stat from "@/components/shared/Stat";
+import TaskTable from "@/components/shared/TaskTable";
+import Dashboard from "@/features/dashboard/components/Dashboard";
+import Solicitacoes from "@/features/solicitacoes/components/Solicitacoes";
+import PedidosMateriais from "@/features/materiais/components/PedidosMateriais";
+import Cronograma from "@/features/cronograma/components/Cronograma";
+import Colaboradores from "@/features/colaboradores/components/Colaboradores";
+import Estoque from "@/features/estoque/components/Estoque";
+import Relatorios from "@/features/relatorios/components/Relatorios";
+import Configuracoes from "@/features/configuracoes/components/Configuracoes";
+import StatusBadge from "@/components/ui/StatusBadge";
+import type { Status, Priority, AreaAssignment, Task } from "@/types";
 
-type Status = "Recebida" | "Em análise" | "Aguardando aprovação" | "Em execução" | "Concluída" | "Cancelada";
-type Priority = "Baixa" | "Média" | "Alta" | "Urgente";
 type Area = { id: string; name: string };
 type Profile = { id: string; full_name: string; email: string | null; role: "admin" | "gestor" | "colaborador"; area_id: string | null; area_ids?: string[]; active: boolean; stock_manager: boolean };
-type AreaAssignment = { areaId:string; area:string; ownerId:string; owner:string; status:Status; isPrimary:boolean; completedAt:string|null };
-type Task = { id: string; protocol: number; title: string; area: string; areaId: string; owner: string; requester: string; requesterId: string; priority: Priority; status: Status; due: string; created: string; completedAt: string | null; description: string; ownerId: string | null; areaAssignments:AreaAssignment[] };
 type AreaMember = { profile_id: string; full_name: string };
 type RequestComment = { id: string; request_id: string; author_id: string; body: string; created_at: string; author_name: string };
 type Material = {
@@ -51,7 +61,6 @@ const statusToDb: Record<Status,string> = { "Recebida":"recebida", "Em análise"
 const dbToStatus: Record<string,Status> = { recebida:"Recebida", em_analise:"Em análise", aguardando_aprovacao:"Aguardando aprovação", em_execucao:"Em execução", concluida:"Concluída", cancelada:"Cancelada" };
 const priorityToDb: Record<Priority,string> = { "Baixa":"baixa", "Média":"media", "Alta":"alta", "Urgente":"urgente" };
 const dbToPriority: Record<string,Priority> = { baixa:"Baixa", media:"Média", alta:"Alta", urgente:"Urgente" };
-const statusClass: Record<Status,string> = { "Recebida":"gray", "Em análise":"blue", "Aguardando aprovação":"amber", "Em execução":"violet", "Concluída":"green", "Cancelada":"red" };
 const defaultAreas = ["Criação","Trade Marketing","Eventos e Ações","Materiais e Estoque","E-commerce","Planejamento e Marketing","Social Media"];
 
 export default function Home() {
@@ -143,6 +152,7 @@ export default function Home() {
   const [materialImageFile,setMaterialImageFile] = useState<File|null>(null);
   const [materialImagePreview,setMaterialImagePreview] = useState("");
   const [removeMaterialImage,setRemoveMaterialImage] = useState(false);
+  const [isMaterialImageDragging,setIsMaterialImageDragging] = useState(false);
   const [materialImageUrls,setMaterialImageUrls] = useState<Record<string,string>>({});
   const [showStockMovement,setShowStockMovement] = useState(false);
   const [stockSearch,setStockSearch] = useState("");
@@ -192,7 +202,7 @@ export default function Home() {
   useEffect(() => {
     if (!supabase) { setAuthLoading(false); setLoginError("As variáveis do Supabase não foram encontradas. Confira o arquivo .env.local e reinicie o servidor."); return; }
     supabase.auth.getSession().then(({data}) => { setSession(data.session); setAuthLoading(false); });
-    const { data: listener } = supabase.auth.onAuthStateChange((event,nextSession) => { setSession(nextSession); setProfile(null); if(event === "PASSWORD_RECOVERY"){setPasswordRecoveryMode(true);setForgotPasswordMode(false);setRecoveryError("");setRecoveryMessage("");} });
+    const { data: listener } = supabase.auth.onAuthStateChange((event,nextSession) => { setSession(nextSession); if(event === "SIGNED_OUT") setProfile(null); if(event === "PASSWORD_RECOVERY"){setPasswordRecoveryMode(true);setForgotPasswordMode(false);setRecoveryError("");setRecoveryMessage("");} });
     return () => listener.subscription.unsubscribe();
   },[]);
 
@@ -960,6 +970,38 @@ export default function Home() {
     if(error)setDataError(error.message);else{setShowNew(false);setForm({title:"",priority:"Média",due:"",description:""});setFormAreaIds([]);setFormOwners({});setFormMembersByArea({});if(session?.user)await loadData(session.user);}
     setSaving(false);
   }
+  function selectMaterialImage(file:File|null) {
+    if (!file) return;
+
+    if (!["image/jpeg","image/png","image/webp"].includes(file.type)) {
+      setStockError("Selecione uma imagem JPG, PNG ou WebP.");
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setStockError("A imagem deve ter no máximo 5 MB.");
+      return;
+    }
+
+    if (materialImagePreview.startsWith("blob:")) {
+      URL.revokeObjectURL(materialImagePreview);
+    }
+
+    setStockError("");
+    setMaterialImageFile(file);
+    setMaterialImagePreview(URL.createObjectURL(file));
+    setRemoveMaterialImage(false);
+  }
+
+  function removeSelectedMaterialImage() {
+    if (materialImagePreview.startsWith("blob:")) {
+      URL.revokeObjectURL(materialImagePreview);
+    }
+
+    setMaterialImageFile(null);
+    setMaterialImagePreview("");
+    setRemoveMaterialImage(true);
+  }
   function openNewMaterial() {
     setEditingMaterialId(null);
     setMaterialForm({name:"",sku:"",description:"",unit:"un",minimum_quantity:"0"});
@@ -1202,7 +1244,6 @@ export default function Home() {
   if(passwordRecoveryMode) return <div className="authScreen"><form className="authCard" onSubmit={updatePassword}><div className="authBrand"><img src="/logo-delrio.svg" alt="DelRio" className="brandLogo authBrandLogo" /><div><small>GESTÃO DE DEMANDAS</small></div></div><p className="eyebrow">RECUPERAÇÃO DE ACESSO</p><h1>Defina sua nova senha</h1><p className="authSub">Escolha uma senha com pelo menos 8 caracteres.</p><label>Nova senha<input type="password" autoComplete="new-password" value={newPassword} onChange={e=>setNewPassword(e.target.value)} placeholder="Digite a nova senha" minLength={8} required/></label><label>Confirmar nova senha<input type="password" autoComplete="new-password" value={confirmNewPassword} onChange={e=>setConfirmNewPassword(e.target.value)} placeholder="Digite novamente a nova senha" minLength={8} required/></label>{recoveryError&&<div className="errorBox">{recoveryError}</div>}<button className="primary authSubmit" disabled={recoveryLoading}>{recoveryLoading?"Salvando...":"Redefinir senha"}</button></form></div>;
   if (!session) return <div className="authScreen"><form className="authCard" onSubmit={forgotPasswordMode?requestPasswordReset:signIn}><div className="authBrand"><img src="/logo-delrio.svg" alt="DelRio" className="brandLogo authBrandLogo" /><div><small>GESTÃO DE DEMANDAS</small></div></div><p className="eyebrow">AMBIENTE DE MARKETING</p><h1>{forgotPasswordMode?"Recuperar senha":"Acesse sua conta"}</h1><p className="authSub">{forgotPasswordMode?"Informe seu e-mail cadastrado para receber o link de redefinição.":"Entre com seu e-mail e senha cadastrados no sistema."}</p><label>E-mail<input type="email" autoComplete="username" value={email} onChange={e=>{setEmail(e.target.value);setRecoveryEmailSent(false);setRecoveryError("");}} placeholder="seuemail@delrio.com.br" required/></label>{!forgotPasswordMode&&<label>Senha<input type="password" autoComplete="current-password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Digite sua senha" required/></label>}{loginError&&!forgotPasswordMode&&<div className="errorBox">{loginError}</div>}{recoveryError&&<div className="errorBox">{recoveryError}</div>}{recoveryEmailSent&&<div className="successBox">Se o endereço estiver cadastrado, você receberá um e-mail com as instruções para redefinir sua senha.</div>}{!forgotPasswordMode?<button type="button" className="textButton" onClick={()=>{setForgotPasswordMode(true);setLoginError("");setRecoveryError("");}}>Esqueci minha senha</button>:<button className="primary authSubmit" disabled={recoveryLoading}>{recoveryLoading?"Enviando...":"Enviar link de recuperação"}</button>}{forgotPasswordMode&&<button type="button" className="textButton" onClick={()=>{setForgotPasswordMode(false);setRecoveryEmailSent(false);setRecoveryError("");}}>Voltar para o login</button>}{!forgotPasswordMode&&<button className="primary authSubmit" disabled={loginLoading}>{loginLoading?"Entrando...":"Entrar"}</button>}<small className="authFoot">Acesso restrito à equipe autorizada.</small></form></div>;
 
-  const nav = [["Dashboard",LayoutDashboard],["Solicitações",ClipboardList],["Pedidos de Materiais",ClipboardCheck],["Cronograma",CalendarDays],["Colaboradores",Users],["Estoque",Package],["Relatórios",BarChart3],["Configurações",Settings],...(profile?.role === "admin" ? [["Auditoria",ShieldCheck] as const] : [])] as const;
   const auditActors = [...new Set(auditLogs.map(log=>log.actor_name || "Sistema"))].sort((a,b)=>a.localeCompare(b,"pt-BR"));
   const auditModules = [...new Set(auditLogs.map(log=>log.table_name))].sort((a,b)=>a.localeCompare(b,"pt-BR"));
   const filteredAuditLogs = auditLogs.filter(log => {
@@ -1217,540 +1258,39 @@ export default function Home() {
     if (auditEndDate && date > auditEndDate) return false;
     return true;
   });
-  return <main className="shell">
-    <aside className={`sidebar ${mobileMenu?"open":""}`}>
-      <div className="brand"><img src="/logo-delrio.svg" alt="DelRio" className="brandLogo sidebarBrandLogo" /><div><small>GESTÃO DE DEMANDAS</small></div><button className="closeMenu" onClick={()=>setMobileMenu(false)}><X/></button></div>
-      <div className="workspace"><span className="dot"/> Ambiente de Marketing <ChevronDown size={14}/></div><div className="navLabel">MENU PRINCIPAL</div>
-      {nav.map(([name,Icon])=><button key={name} className={`navItem ${active===name?"active":""}`} onClick={()=>{setActive(name);setMobileMenu(false);setSelected(null)}}><Icon size={18}/>{name}{name==="Solicitações"&&<span className="navCount">{tasks.length}</span>}</button>)}
-      <div className="sidebarBottom"><div className="userAvatar">{(profile?.full_name||"U").split(" ").map(x=>x[0]).slice(0,2).join("").toUpperCase()}</div><div><b>{profile?.full_name||"Usuário"}</b><small>{profile?.role==="admin"?"Administrador":profile?.role==="gestor"?"Gestor":"Colaborador"}</small></div><button className="logoutIcon" title="Sair" onClick={signOut}><LogOut size={16}/></button></div>
-    </aside>
-    <style>{`.listPagination{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:14px 16px;border-top:1px solid #f0edf4}.paginationSummary{font-size:12px;color:#777487}.paginationSummary b{color:#4b3a60}.paginationControls{display:flex;align-items:center;gap:5px;flex-wrap:wrap}.paginationSize{display:flex;align-items:center;gap:7px;margin-right:7px;color:#777487;font-size:11px;font-weight:600}.paginationSize select{height:32px;padding:0 8px;border:1px solid #e1e2ea;border-radius:8px;background:#fff;color:#454253;font:500 12px inherit}.paginationButton{min-width:32px;height:32px;padding:0 9px;border:1px solid #e5e2eb;border-radius:8px;background:#fff;color:#686579;font:600 11px inherit;cursor:pointer}.paginationButton:hover:not(:disabled){border-color:#c7a5e8;color:#7022bd}.paginationButton.active{border-color:#7a1bd8;background:#f5edff;color:#7020c5}.paginationButton:disabled{opacity:.4;cursor:not-allowed}.paginationDots{padding:0 3px;color:#858397}@media(max-width:620px){.listPagination{align-items:flex-start}.paginationControls{width:100%}.paginationSize{margin-right:auto}}`}</style>
-    <section className="main">
-      <header className="topbar"><button className="menuButton" onClick={()=>setMobileMenu(true)}><Menu/></button><div className="crumb">Marketing <span>/</span> {active}</div><div className="topRight"><div className="notificationWrap"><button className="notificationBell" type="button" aria-label="Abrir notificações" title="Notificações" onClick={()=>setShowNotifications(old=>!old)}><Bell size={19}/>{unreadNotificationCount>0&&<span className="notificationBadge">{unreadNotificationCount>99?"99+":unreadNotificationCount}</span>}</button>{showNotifications&&<div className="notificationPanel"><div className="notificationPanelHead"><div><b>Notificações</b><small>{unreadNotificationCount} não lida(s)</small></div><div className="notificationPanelActions"><button className="textButton" type="button" onClick={markAllNotificationsRead} disabled={!unreadNotificationCount}>Marcar todas como lidas</button><button className="iconButton" type="button" aria-label="Fechar notificações" onClick={()=>setShowNotifications(false)}><X size={14}/></button></div></div>{notificationsError&&<div className="notificationError">{notificationsError}</div>}{notificationsLoading&&!notifications.length?<div className="notificationEmpty">Carregando notificações...</div>:!notifications.length?<div className="notificationEmpty">Você ainda não tem notificações.</div>:<><div className="notificationList">{pageItems("notifications",notifications).map(item=><button type="button" key={item.id} className={`notificationItem ${item.is_read?"read":"unread"}`} onClick={()=>void openNotification(item)}><span className="notificationItemDot"/><span className="notificationItemContent"><b>{item.title}</b><span>{item.message}</span><small>{new Date(item.created_at).toLocaleString("pt-BR",{dateStyle:"short",timeStyle:"short"})}</small></span></button>)}</div><Pagination {...paginationProps("notifications",notifications.length)}/></>}</div>}</div><span className="online"><i/> {dataLoading?"Sincronizando":"Conectado ao Supabase"}</span><div className="userAvatar">{(profile?.full_name||"U").split(" ").map(x=>x[0]).slice(0,2).join("").toUpperCase()}</div></div></header>
-      <div className="content">
-        {dataError&&<div className="errorBanner"><span>{dataError}</span><button onClick={()=>session?.user&&loadData(session.user)}>Tentar novamente</button></div>}
-        {commentNotice&&<div className="notice" style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginBottom:16}}><span style={{display:"flex",alignItems:"center",gap:8}}><Bell size={16}/>{commentNotice}</span><button className="textButton" onClick={()=>setCommentNotice("")}>Fechar</button></div>}
-        {active==="Dashboard" && <>
-          <div className="pageHeading"><div><p className="eyebrow">VISÃO GERAL</p><h1>Dashboard</h1><p className="sub">Acompanhe as demandas e a operação do Marketing DelRio.</p></div><button className="primary" onClick={()=>setShowNew(true)}><Plus size={17}/> Nova solicitação</button></div>
-          <style>{`
-            .dashFilterCard{padding:22px 24px;margin-bottom:18px;border:1px solid #e7e8ef;background:linear-gradient(135deg,#fff 0%,#fcfbff 100%);box-shadow:0 5px 18px rgba(31,24,55,.035)}
-            .dashFilterTop{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:20px}
-            .dashFilterTitle{display:flex;align-items:center;gap:11px}
-            .dashFilterIcon{width:38px;height:38px;display:grid;place-items:center;border-radius:12px;background:#f2eaff;color:#7a1bd8;flex:none}
-            .dashFilterTitle h3{margin:0 0 4px;font-size:15px;font-weight:700;color:#20202b}
-            .dashFilterTitle p{margin:0;font-size:12px;color:#858397}
-            .dashClear{border:0;background:transparent;color:#7624c7;font-size:12px;font-weight:700;padding:9px 10px;border-radius:8px;cursor:pointer;white-space:nowrap}
-            .dashClear:hover{background:#f5edff}
-            .dashFilterGrid{display:grid;grid-template-columns:minmax(210px,.85fr) minmax(0,1.6fr);gap:22px;align-items:start}
-            .dashFieldLabel{display:block;margin:0 0 9px;color:#565568;font-size:11px;font-weight:700;letter-spacing:.035em;text-transform:uppercase}
-            .dashDateSelect,.dashDateInput{width:100%;height:43px;border:1px solid #e1e2ea;border-radius:10px;background:#fff;padding:0 12px;color:#292837;font-size:13px;font-weight:500;font-family:inherit;outline:none;transition:border-color .15s,box-shadow .15s}
-            .dashDateSelect:focus,.dashDateInput:focus{border-color:#9b5cdb;box-shadow:0 0 0 3px rgba(122,27,216,.10)}
-            .dashPeriodOptions{display:flex;flex-wrap:wrap;gap:7px}
-            .dashPeriodButton{border:1px solid #e5e2eb;background:#fff;color:#686579;border-radius:9px;padding:10px 12px;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s}
-            .dashPeriodButton:hover{border-color:#c7a5e8;color:#7022bd}
-            .dashPeriodButton.active{border-color:#7a1bd8;background:#f5edff;color:#7020c5;box-shadow:inset 0 0 0 1px rgba(122,27,216,.06)}
-            .dashCustomDates{display:grid;grid-template-columns:repeat(2,minmax(150px,1fr));gap:12px;margin-top:16px;padding:14px;background:#faf8fd;border:1px solid #eee8f5;border-radius:12px}
-            .dashFilterBottom{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:18px;padding-top:14px;border-top:1px solid #f0edf4;flex-wrap:wrap}
-            .dashFilterSummary{display:flex;align-items:center;gap:8px;color:#777487;font-size:12px}
-            .dashFilterSummary strong{color:#4b3a60;font-weight:700}
-            .dashFilterNote{margin:12px 0 0;padding:10px 12px;border-radius:9px;background:#fff9eb;color:#8a641c;font-size:11px;line-height:1.5}
-            .dashFilterError{margin:10px 0 0;color:#b42318;font-size:12px}
-            @media(max-width:760px){.dashFilterCard{padding:18px}.dashFilterGrid{grid-template-columns:1fr;gap:17px}.dashFilterTop{margin-bottom:17px}.dashCustomDates{grid-template-columns:1fr 1fr}}
-            @media(max-width:440px){.dashCustomDates{grid-template-columns:1fr}.dashPeriodButton{flex:1 1 calc(50% - 7px)}}
-          `}</style>
-          <section className="panel dashFilterCard">
-            <div className="dashFilterTop">
-              <div className="dashFilterTitle"><span className="dashFilterIcon"><CalendarDays size={19}/></span><div><h3>Filtros do Dashboard</h3><p>Personalize a análise das solicitações por data e período.</p></div></div>
-              <button className="dashClear" onClick={()=>{setDashboardPeriod("all");setDashboardDateMode("created");setDashboardStart("");setDashboardEnd("")}}>Limpar filtros</button>
-            </div>
-            <div className="dashFilterGrid">
-              <div><label className="dashFieldLabel" htmlFor="dashboard-date-mode">Considerar data</label><select id="dashboard-date-mode" className="dashDateSelect" value={dashboardDateMode} onChange={e=>setDashboardDateMode(e.target.value as "created"|"completed"|"due")}><option value="created">Data de abertura</option><option value="completed">Data de conclusão</option><option value="due">Data do prazo</option></select></div>
-              <div><span className="dashFieldLabel">Período de análise</span><div className="dashPeriodOptions">{[{value:"all",label:"Todo o período"},{value:"month",label:"Este mês"},{value:"30",label:"Últimos 30 dias"},{value:"90",label:"Últimos 90 dias"},{value:"year",label:"Este ano"},{value:"custom",label:"Personalizado"}].map(option=><button key={option.value} type="button" className={`dashPeriodButton ${dashboardPeriod===option.value?"active":""}`} aria-pressed={dashboardPeriod===option.value} onClick={()=>setDashboardPeriod(option.value)}>{option.label}</button>)}</div></div>
-            </div>
-            {dashboardPeriod==="custom"&&<div className="dashCustomDates"><div><label className="dashFieldLabel" htmlFor="dashboard-start">Data inicial</label><input id="dashboard-start" className="dashDateInput" type="date" value={dashboardStart} onChange={e=>setDashboardStart(e.target.value)}/></div><div><label className="dashFieldLabel" htmlFor="dashboard-end">Data final</label><input id="dashboard-end" className="dashDateInput" type="date" value={dashboardEnd} min={dashboardStart||undefined} onChange={e=>setDashboardEnd(e.target.value)}/></div></div>}
-            {dashboardPeriod==="custom"&&dashboardStart&&dashboardEnd&&dashboardStart>dashboardEnd&&<p className="dashFilterError">A data inicial não pode ser posterior à data final.</p>}
-            {dashboardDateMode==="completed"&&<p className="dashFilterNote">A análise por conclusão utiliza a data registrada quando a solicitação foi concluída. Solicitações concluídas antes da ativação desse registro podem não aparecer nesse filtro.</p>}
-            <div className="dashFilterBottom"><span className="dashFilterSummary"><CalendarDays size={14}/> Critério: <strong>{dashboardDateLabel}</strong></span><span className="dashFilterSummary">{dashboardTasks.length} solicitação(ões) no resultado</span></div>
-          </section>
-          <div className="stats"><Stat icon={<ClipboardList/>} label="Total de solicitações" value={dashboardTasks.length} tone="blue"/><Stat icon={<Activity/>} label="Em andamento" value={dashboardInProgress} tone="violet"/><Stat icon={<CheckCircle2/>} label="Concluídas" value={dashboardDone} tone="green"/><Stat icon={<AlertTriangle/>} label="Atrasadas" value={dashboardLate} tone="red"/></div>
-          <div className="gridMain"><div className="panel"><div className="panelHead"><div><h3>Solicitações recentes</h3><p>Demandas dentro do período selecionado</p></div><button className="textButton" onClick={()=>setActive("Solicitações")}>Ver todas <ArrowUpRight size={15}/></button></div><TaskTable tasks={[...dashboardTasks].sort((a,b)=>b.created.localeCompare(a.created)).slice(0,5)} onSelect={setSelected} unreadCounts={unreadCounts}/></div>
-            <div className="panel"><div className="panelHead"><div><h3>Distribuição por área</h3><p>Volume de solicitações no período</p></div></div><div className="areaBars">{areaNames.map(a=>{const n=dashboardTasks.filter(t=>t.area===a).length;return <div className="barRow" key={a}><div><span>{a}</span><b>{n}</b></div><div className="track"><i style={{width:`${dashboardTasks.length?n/dashboardTasks.length*100:0}%`}}/></div></div>})}</div></div></div>
-          <div className="panel" style={{marginBottom:18}}>
-            <div className="panelHead"><div><h3>Solicitações por colaborador</h3><p>Distribuição das demandas por responsável pela execução</p></div><span className="muted">{requestsByOwner.length} colaborador(es)</span></div>
-            {!requestsByOwner.length ? <div className="emptyTable">Ainda não há solicitações atribuídas a colaboradores.</div> : <div className="tableWrap"><table><thead><tr><th>Colaborador responsável</th><th>Total atribuídas</th><th>Em andamento</th><th>Concluídas</th><th>Atrasadas</th><th>Canceladas</th></tr></thead><tbody>
-              {pageItems("dashboardOwners",requestsByOwner).map(person=><tr key={person.id}><td><b>{person.name}</b></td><td><b>{person.total}</b></td><td>{person.inProgress}</td><td>{person.done}</td><td>{person.late}</td><td>{person.cancelled}</td></tr>)}
-            </tbody></table></div>}{requestsByOwner.length>0&&<Pagination {...paginationProps("dashboardOwners",requestsByOwner.length)}/>}
-          </div>
-          <div className="panel"><div className="panelHead"><div><h3>Próximos prazos</h3><p>Demandas que exigem acompanhamento</p></div><button className="textButton" onClick={()=>setActive("Cronograma")}>Abrir cronograma <ArrowUpRight size={15}/></button></div><TaskTable tasks={[...dashboardTasks].filter(t=>t.status!=="Concluída"&&t.status!=="Cancelada").sort((a,b)=>a.due.localeCompare(b.due)).slice(0,4)} onSelect={setSelected} unreadCounts={unreadCounts}/></div>
-        </>}
-        {active==="Solicitações" && <><div className="pageHeading"><div><p className="eyebrow">GESTÃO OPERACIONAL</p><h1>Solicitações</h1><p className="sub">Cadastre, distribua e acompanhe as demandas.</p></div><button className="primary" onClick={()=>setShowNew(true)}><Plus size={17}/> Nova solicitação</button></div><style>{`
-            .requestFilterCard{padding:22px 24px;margin-bottom:18px;border:1px solid #e7e8ef;background:linear-gradient(135deg,#fff 0%,#fcfbff 100%);box-shadow:0 5px 18px rgba(31,24,55,.035)}
-            .requestFilterTop{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:20px}
-            .requestFilterTitle{display:flex;align-items:center;gap:11px}
-            .requestFilterIcon{width:38px;height:38px;display:grid;place-items:center;border-radius:12px;background:#f2eaff;color:#7a1bd8;flex:none}
-            .requestFilterTitle h3{margin:0 0 4px;font-size:15px;font-weight:700;color:#20202b}
-            .requestFilterTitle p{margin:0;font-size:12px;color:#858397}
-            .requestFilterClear{border:0;background:transparent;color:#7624c7;font-size:12px;font-weight:700;padding:9px 10px;border-radius:8px;cursor:pointer;white-space:nowrap}
-            .requestFilterClear:hover{background:#f5edff}
-            .requestFilterGrid{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(190px,.85fr) minmax(190px,.85fr);gap:14px;align-items:end}
-            .requestFilterField label{display:block;margin:0 0 9px;color:#565568;font-size:11px;font-weight:700;letter-spacing:.035em;text-transform:uppercase}
-            .requestFilterControl{width:100%;height:43px;border:1px solid #e1e2ea;border-radius:10px;background:#fff;padding:0 12px;color:#292837;font-size:13px;font-weight:500;font-family:inherit;outline:none;transition:border-color .15s,box-shadow .15s;box-sizing:border-box}
-            .requestFilterControl:focus{border-color:#9b5cdb;box-shadow:0 0 0 3px rgba(122,27,216,.10)}
-            .requestFilterSearch{position:relative}
-            .requestFilterSearch>svg{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:#89869a;pointer-events:none}
-            .requestFilterSearch .requestFilterControl{padding-left:40px}
-            .requestFilterBottom{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:18px;padding-top:14px;border-top:1px solid #f0edf4;color:#777487;font-size:12px}
-            .requestFilterBottom strong{color:#4b3a60;font-weight:700}
-            @media(max-width:760px){.requestFilterCard{padding:18px}.requestFilterGrid{grid-template-columns:1fr;gap:16px}.requestFilterTop{margin-bottom:17px}}
-          `}</style>
-          <section className="panel requestFilterCard">
-            <div className="requestFilterTop">
-              <div className="requestFilterTitle"><span className="requestFilterIcon"><Search size={19}/></span><div><h3>Filtros das solicitações</h3><p>Encontre demandas por palavra-chave ou responsável.</p></div></div>
-              <button type="button" className="secondary" style={{padding:"8px 12px",fontSize:12}} onClick={()=>{setSearch("");setRequestUserFilter("Todos");setRequestStatusFilter("Todos")}}>Limpar filtros</button>
-            </div>
-            <div className="requestFilterGrid">
-              <div className="requestFilterField"><label htmlFor="request-search">Buscar solicitações</label><div className="requestFilterSearch"><Search size={16}/><input id="request-search" className="requestFilterControl" placeholder="Título, área, responsável ou status..." value={search} onChange={e=>setSearch(e.target.value)}/></div></div>
-              <div className="requestFilterField"><label htmlFor="request-user-filter">Responsável</label><select id="request-user-filter" className="requestFilterControl" value={requestUserFilter} onChange={e=>setRequestUserFilter(e.target.value)}><option value="Todos">Todos os usuários</option>{requestUsers.map(([id,name])=><option key={id} value={id}>{name}</option>)}{tasks.some(t=>t.areaAssignments.length>0&&t.areaAssignments.every(a=>!a.ownerId))&&<option value="Sem responsável">Sem responsável</option>}</select></div>
-              <div className="requestFilterField"><label htmlFor="request-status-filter">Status</label><select id="request-status-filter" className="requestFilterControl" value={requestStatusFilter} onChange={e=>setRequestStatusFilter(e.target.value as Status|"Todos")}><option value="Todos">Todos os status</option>{(["Recebida","Em análise","Aguardando aprovação","Em execução","Concluída","Cancelada"] as Status[]).map(status=><option key={status} value={status}>{status}</option>)}</select></div>
-            </div>
-            <div className="requestFilterBottom"><span><strong>{filtered.length}</strong> registro(s) encontrado(s)</span></div>
-          </section>
-          <div className="panel"><TaskTable tasks={pageItems("requests",filtered)} onSelect={setSelected} unreadCounts={unreadCounts}/><Pagination {...paginationProps("requests",filtered.length)}/></div></>}
-        {active==="Pedidos de Materiais" && <>
-          <div className="pageHeading"><div><p className="eyebrow">SUPRIMENTOS INTERNOS</p><h1>Pedidos de Materiais</h1><p className="sub">Solicite materiais, acompanhe aprovações e consulte a separação e entrega.</p></div><div style={{display:"flex",gap:10,flexWrap:"wrap"}}><button className="secondary" onClick={loadMaterialOrders} disabled={ordersLoading}><RefreshCw size={15}/> Atualizar</button><button className="primary" onClick={()=>{setOrdersError("");setOrderAreaId(myOrderAreas.some(a=>a.id===profile?.area_id)?profile?.area_id||"":myOrderAreas[0]?.id||"");setShowNewMaterialOrder(true)}} disabled={!myOrderAreas.length}><Plus size={16}/> Novo pedido</button></div></div>
-          {ordersError&&<div className="errorBanner"><span>{ordersError}</span><button onClick={()=>setOrdersError("")}>Fechar</button></div>}
-          <style>{`
-             .ordersFilterCard{padding:22px 24px;margin-bottom:18px;border:1px solid #e7e8ef;background:linear-gradient(135deg,#fff 0%,#fcfbff 100%);box-shadow:0 5px 18px rgba(31,24,55,.035)}
-             .ordersFilterTop{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:18px}
-             .ordersFilterTitle{display:flex;align-items:center;gap:11px}
-             .ordersFilterIcon{width:38px;height:38px;display:grid;place-items:center;border-radius:12px;background:#f2eaff;color:#7a1bd8;flex:none}
-             .ordersFilterTitle h3{margin:0 0 4px;font-size:15px;font-weight:700;color:#20202b}
-             .ordersFilterTitle p{margin:0;font-size:12px;color:#858397}
-             .ordersFilterGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;align-items:start}
-             .ordersFieldLabel{display:block;margin:0 0 9px;color:#565568;font-size:11px;font-weight:700;letter-spacing:.035em;text-transform:uppercase}
-             .ordersDateInput{width:100%;height:43px;box-sizing:border-box;border:1px solid #e1e2ea;border-radius:10px;background:#fff;padding:0 12px;color:#292837;font-size:13px;font-weight:500;font-family:inherit;outline:none;transition:border-color .15s,box-shadow .15s}
-             .ordersDateInput:focus{border-color:#9b5cdb;box-shadow:0 0 0 3px rgba(122,27,216,.10)}
-             .ordersPeriodLabel{margin:0 0 12px;color:#565568;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
-             .ordersPresetRow{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
-             .ordersPresetButton{height:39px;padding:0 14px;border:1px solid #e1e2ea;border-radius:10px;background:#fff;color:#55536a;font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;transition:all .15s}
-             .ordersPresetButton:hover{border-color:#b98be8;color:#7624c7}
-             .ordersPresetButton.active{border-color:#8b24e8;background:#f5edff;color:#7624c7;box-shadow:0 0 0 1px rgba(122,27,216,.08)}
-             .ordersRefineSection{margin-top:20px;padding-top:17px;border-top:1px solid #eeeaf4}
-             .ordersRefineHeading{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
-             .ordersRefineHeading span{font-size:12px;font-weight:700;color:#383448}
-             .ordersRefineHeading small{font-size:11px;color:#9692a5}
-             .ordersExtraFilters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
-             .ordersFilterField{min-width:0}
-             .ordersCustomDates{margin-top:16px;padding:14px;background:#faf8fd;border:1px solid #eeeaf4;border-radius:12px}
-             .ordersSelect{width:100%;height:43px;box-sizing:border-box;border:1px solid #e1e2ea;border-radius:10px;background:#fff;padding:0 12px;color:#292837;font-size:13px;font-weight:500;font-family:inherit;outline:none}
-             .ordersSelect:focus{border-color:#9b5cdb;box-shadow:0 0 0 3px rgba(122,27,216,.10)}
-             .ordersFilterBottom{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:18px;padding-top:14px;border-top:1px solid #f0edf4;flex-wrap:wrap;color:#777487;font-size:12px}
-             .ordersFilterBottom strong{color:#4b3a60;font-weight:700}
-             .ordersFilterClear{border:0;background:transparent;color:#7624c7;font-size:12px;font-weight:700;padding:9px 10px;border-radius:8px;cursor:pointer;white-space:nowrap}
-             .ordersFilterClear:hover{background:#f5edff}
-             @media(max-width:640px){.ordersFilterCard{padding:18px}.ordersFilterGrid,.ordersExtraFilters{grid-template-columns:1fr;gap:12px}.ordersFilterTop{margin-bottom:17px}.ordersPresetRow{gap:7px}.ordersPresetButton{flex:1 1 auto;padding:0 11px}}
-           `}</style>
-           <section className="panel ordersFilterCard">
-             <div className="ordersFilterTop"><div className="ordersFilterTitle"><span className="ordersFilterIcon"><CalendarDays size={19}/></span><div><h3>Filtrar pedidos</h3><p>Combine período, status e área solicitante para refinar a consulta.</p></div></div><button type="button" className="ordersFilterClear" onClick={()=>{applyOrdersPeriod("all");setOrdersStatusFilter("todos");setOrdersAreaFilter("todos")}}>Limpar filtros</button></div>
-              <p className="ordersPeriodLabel">Período de análise</p>
-              <div className="ordersPresetRow">
-                <button type="button" className={`ordersPresetButton ${ordersPeriodPreset==="all"?"active":""}`} onClick={()=>applyOrdersPeriod("all")}>Todo o período</button>
-                <button type="button" className={`ordersPresetButton ${ordersPeriodPreset==="month"?"active":""}`} onClick={()=>applyOrdersPeriod("month")}>Este mês</button>
-                <button type="button" className={`ordersPresetButton ${ordersPeriodPreset==="last30"?"active":""}`} onClick={()=>applyOrdersPeriod("last30")}>Últimos 30 dias</button>
-                <button type="button" className={`ordersPresetButton ${ordersPeriodPreset==="last90"?"active":""}`} onClick={()=>applyOrdersPeriod("last90")}>Últimos 90 dias</button>
-                <button type="button" className={`ordersPresetButton ${ordersPeriodPreset==="year"?"active":""}`} onClick={()=>applyOrdersPeriod("year")}>Este ano</button>
-                <button type="button" className={`ordersPresetButton ${ordersPeriodPreset==="custom"?"active":""}`} onClick={()=>applyOrdersPeriod("custom")}>Personalizado</button>
-              </div>
-              {ordersPeriodPreset==="custom"&&<div className="ordersFilterGrid ordersCustomDates">
-                <div><label className="ordersFieldLabel" htmlFor="orders-start-date">Data inicial</label><input id="orders-start-date" className="ordersDateInput" type="date" value={ordersStartDate} onChange={e=>setOrdersStartDate(e.target.value)} max={ordersEndDate||undefined}/></div>
-                <div><label className="ordersFieldLabel" htmlFor="orders-end-date">Data final</label><input id="orders-end-date" className="ordersDateInput" type="date" value={ordersEndDate} onChange={e=>setOrdersEndDate(e.target.value)} min={ordersStartDate||undefined}/></div>
-              </div>}
-              <div className="ordersRefineSection">
-                <div className="ordersRefineHeading"><span>Refinar resultados</span><small>Filtros combináveis</small></div>
-                <div className="ordersExtraFilters">
-                  <div className="ordersFilterField"><label className="ordersFieldLabel" htmlFor="orders-status-filter">Status do pedido</label><select id="orders-status-filter" className="ordersSelect" value={ordersStatusFilter} onChange={e=>setOrdersStatusFilter(e.target.value as MaterialOrderStatus|"todos")}><option value="todos">Todos os status</option>{(Object.entries(orderStatusLabels) as [MaterialOrderStatus,string][]).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></div>
-                  <div className="ordersFilterField"><label className="ordersFieldLabel" htmlFor="orders-area-filter">Área solicitante</label><select id="orders-area-filter" className="ordersSelect" value={ordersAreaFilter} onChange={e=>setOrdersAreaFilter(e.target.value)}><option value="todos">Todas as áreas</option>{areas.slice().sort((a,b)=>a.name.localeCompare(b.name,"pt-BR")).map(area=><option key={area.id} value={area.id}>{area.name}</option>)}</select></div>
-                </div>
-              </div><div className="ordersFilterBottom"><span>{ordersDateRangeInvalid?<strong style={{color:"#b42318"}}>A data inicial não pode ser posterior à data final.</strong>:<>Exibindo <strong>{filteredMaterialOrders.length}</strong> de <strong>{materialOrders.length}</strong> pedido(s).</>}</span></div>
-           </section>
-          <div className="stats"><Stat icon={<ClipboardList/>} label="Pedidos visíveis" value={filteredMaterialOrders.length} tone="blue"/><Stat icon={<Clock3/>} label="Aguardando gestor" value={pendingManagerOrders} tone="violet"/><Stat icon={<PackageCheck/>} label="Aguardando estoque" value={pendingStockOrders} tone="amber"/><Stat icon={<Layers/>} label="Em atendimento" value={activeMaterialOrders} tone="green"/></div>
-          <div className="panel"><div className="panelHead"><div><h3>Pedidos cadastrados</h3><p>Os pedidos exibidos respeitam as permissões de acesso do seu perfil.</p></div><span className="muted">{filteredMaterialOrders.length} registro(s)</span></div>
-            {ordersLoading?<div className="emptyTable">Carregando pedidos de materiais...</div>:!materialOrders.length?<div className="emptyTable">Nenhum pedido de materiais encontrado. Use “Novo pedido” para registrar a primeira solicitação.</div>:ordersDateRangeInvalid?<div className="emptyTable">Ajuste o período informado para consultar os pedidos.</div>:!filteredMaterialOrders.length?<div className="emptyTable">Nenhum pedido encontrado no período selecionado.</div>:<div className="tableWrap"><table><thead><tr><th>Pedido</th><th>Solicitante / Área</th><th>Necessário em</th><th>Materiais</th><th>Status</th><th style={{textAlign:"right"}}>Ação</th></tr></thead><tbody>{pageItems("orders",filteredMaterialOrders).map(order=>{const count=materialOrderItems.filter(item=>item.order_id===order.id).length;return <tr key={order.id}><td><div style={{display:"flex",flexDirection:"column",gap:3}}><b style={{whiteSpace:"nowrap"}}>#{order.protocol}</b><span className="muted" style={{fontSize:12}}>{new Date(order.created_at).toLocaleDateString("pt-BR")}</span></div></td><td><div style={{display:"flex",flexDirection:"column",gap:3,minWidth:130}}><b>{orderRequesterName(order.requester_id)}</b><span className="muted" style={{fontSize:12}}>{orderAreaName(order.area_id)}</span></div></td><td style={{whiteSpace:"nowrap"}}>{order.needed_by?new Date(order.needed_by+"T12:00:00").toLocaleDateString("pt-BR"):"—"}</td><td><span style={{display:"inline-flex",alignItems:"center",justifyContent:"center",minWidth:28,padding:"4px 9px",borderRadius:20,background:"var(--surface-soft,#f4f2f8)",fontSize:12,fontWeight:700}}>{count}</span><span className="muted" style={{fontSize:12,marginLeft:7}}>{count===1?"material":"materiais"}</span></td><td><span className={`status ${order.status==="concluido"?"green":order.status.startsWith("rejeitado")||order.status==="cancelado"?"red":order.status.includes("aguardando")?"amber":"blue"}`}>{orderStatusLabels[order.status]}</span></td><td style={{textAlign:"right"}}><button className="textButton" style={{whiteSpace:"nowrap"}} onClick={()=>setSelectedMaterialOrder(order.id)}>Ver detalhes <ArrowUpRight size={14}/></button></td></tr>})}</tbody></table></div>}<Pagination {...paginationProps("orders",filteredMaterialOrders.length)}/>
-          </div>
-          {selectedOrder&&<div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setSelectedMaterialOrder(null)}}>
-            <div className="modal" style={{width:"min(820px,100%)",maxWidth:820,maxHeight:"90vh",padding:26,overflowY:"auto"}}>
-              <div className="modalHead">
-                <div><p className="eyebrow">PEDIDO #{selectedOrder.protocol}</p><h2>Detalhes do pedido</h2><p>{orderRequesterName(selectedOrder.requester_id)} · {orderAreaName(selectedOrder.area_id)} · Necessário em {selectedOrder.needed_by?new Date(selectedOrder.needed_by+"T12:00:00").toLocaleDateString("pt-BR"):"data não informada"}</p></div>
-                <button className="iconButton" onClick={()=>setSelectedMaterialOrder(null)} aria-label="Fechar detalhes"><X size={18}/></button>
-              </div>
-              <div className="detailGrid">
-                <div><small>Status do pedido</small><span className={`status ${selectedOrder.status==="concluido"?"green":selectedOrder.status.startsWith("rejeitado")||selectedOrder.status==="cancelado"?"red":selectedOrder.status.includes("aguardando")?"amber":"blue"}`}>{orderStatusLabels[selectedOrder.status]}</span></div>
-                <div><small>Data da solicitação</small><b>{new Date(selectedOrder.created_at).toLocaleDateString("pt-BR")}</b></div>
-              </div>
-              <div className="notice" style={{marginTop:16}}><b>Finalidade:</b> {selectedOrder.purpose}</div>
-              <div style={{marginTop:20}}>
-                <div className="panelHead"><div><h3>Materiais solicitados</h3><p>{selectedOrderItems.length} item(ns) neste pedido.</p></div></div>
-                <div className="tableWrap"><table><thead><tr><th>Material</th><th>Código</th><th>Quantidade</th><th>Unidade</th></tr></thead><tbody>{pageItems("orderItems",selectedOrderItems).map(item=><tr key={item.id}><td><b>{item.material?.name||"Material"}</b></td><td>{item.material?.sku||"—"}</td><td>{Number(item.quantity).toLocaleString("pt-BR")}</td><td>{item.material?.unit||"un"}</td></tr>)}</tbody></table></div><Pagination {...paginationProps("orderItems",selectedOrderItems.length)}/>
-              </div>
-              {selectedOrder.rejection_reason&&<div className="errorBox" style={{marginTop:14}}>Justificativa: {selectedOrder.rejection_reason}</div>}
-              <div style={{display:"flex",gap:9,flexWrap:"wrap",marginTop:20}}>
-                {selectedOrder.status==="aguardando_aprovacao_gestor"&&isManager&&<><button className="primary" disabled={ordersSaving} onClick={()=>runMaterialOrderAction("approve_material_order_manager",selectedOrder.id)}><CheckCircle2 size={15}/> Aprovar pedido</button><button className="secondary" disabled={ordersSaving} onClick={()=>runMaterialOrderAction("reject_material_order_manager",selectedOrder.id,true)}>Rejeitar pedido</button></>}
-                {selectedOrder.status==="aguardando_aprovacao_estoque"&&canManageStock&&<><button className="primary" disabled={ordersSaving} onClick={()=>runMaterialOrderAction("approve_material_order_stock",selectedOrder.id)}><CheckCircle2 size={15}/> Aprovar e reservar estoque</button><button className="secondary" disabled={ordersSaving} onClick={()=>runMaterialOrderAction("reject_material_order_stock",selectedOrder.id,true)}>Rejeitar pedido</button></>}
-                {selectedOrder.status==="em_separacao"&&canManageStock&&<button className="primary" disabled={ordersSaving} onClick={()=>runMaterialOrderAction("release_material_order_for_pickup",selectedOrder.id)}><PackageCheck size={15}/> Liberar para retirada</button>}
-                {selectedOrder.status==="aguardando_retirada"&&canManageStock&&<button className="primary" disabled={ordersSaving} onClick={()=>runMaterialOrderAction("complete_material_order",selectedOrder.id)}><CheckCircle2 size={15}/> Confirmar entrega</button>}
-                {canManageStock&&["em_separacao","aguardando_retirada"].includes(selectedOrder.status)&&<button className="secondary" disabled={ordersSaving} onClick={()=>runMaterialOrderAction("cancel_material_order",selectedOrder.id,true)}>Cancelar pedido</button>}
-              </div>
-              <div style={{marginTop:24}}>
-                <div className="panelHead"><div><h3><History size={16} style={{display:"inline",verticalAlign:"-3px",marginRight:6}}/>Histórico do pedido</h3><p>Registro cronológico das aprovações e movimentações.</p></div></div>
-                {!selectedOrderHistory.length?<div className="emptyTable">Nenhum evento registrado.</div>:<div className="timeline">{pageItems("orderHistory",[...selectedOrderHistory].reverse()).map(event=><div className="timelineItem" key={event.id}><div className="timelineInfo"><b>{event.details||event.action.replaceAll("_"," ")}</b><small>{event.actor_name||"Usuário"} · {new Date(event.created_at).toLocaleString("pt-BR")}</small></div>{event.new_status&&<span className="status blue">{orderStatusLabels[event.new_status as MaterialOrderStatus]||event.new_status}</span>}</div>)}</div>}<Pagination {...paginationProps("orderHistory",selectedOrderHistory.length)}/>
-              </div>
-              <div className="modalActions"><button className="secondary" onClick={()=>setSelectedMaterialOrder(null)}>Fechar</button></div>
-            </div>
-          </div>}
-        </>}
-        {active==="Cronograma" && <>
-          <div className="pageHeading"><div><p className="eyebrow">PLANEJAMENTO</p><h1>Cronograma da equipe</h1><p className="sub">Acompanhe prazos, responsáveis e andamento das entregas.</p></div></div>
-          <div className="stats" style={{marginBottom:18}}>
-            <Stat icon={<AlertTriangle/>} label="Atrasadas" value={scheduleOverdueCount} tone="red"/>
-            <Stat icon={<CalendarDays/>} label="Vencem hoje" value={scheduleTodayCount} tone="red"/>
-            <Stat icon={<Clock3/>} label="Próximos 7 dias" value={scheduleNextSevenCount} tone="violet"/>
-            <Stat icon={<ClipboardList/>} label="No cronograma" value={tasks.filter(t=>t.status!=="Cancelada").length} tone="blue"/>
-          </div>
-          <style>{`
-            .scheduleFilterCard{padding:22px 24px;margin-bottom:18px;border:1px solid #e7e8ef;background:linear-gradient(135deg,#fff 0%,#fcfbff 100%);box-shadow:0 5px 18px rgba(31,24,55,.035)}
-            .scheduleFilterTop{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:20px}
-            .scheduleFilterTitle{display:flex;align-items:center;gap:11px}
-            .scheduleFilterIcon{width:38px;height:38px;display:grid;place-items:center;border-radius:12px;background:#f2eaff;color:#7a1bd8;flex:none}
-            .scheduleFilterTitle h3{margin:0 0 4px;font-size:15px;font-weight:700;color:#20202b}
-            .scheduleFilterTitle p{margin:0;font-size:12px;color:#858397}
-            .scheduleFilterClear{border:0;background:transparent;color:#7624c7;font-size:12px;font-weight:700;padding:9px 10px;border-radius:8px;cursor:pointer;white-space:nowrap}
-            .scheduleFilterClear:hover{background:#f5edff}
-            .scheduleFilterGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;align-items:start}
-            .scheduleFieldLabel{display:block;margin:0 0 9px;color:#565568;font-size:11px;font-weight:700;letter-spacing:.035em;text-transform:uppercase}
-            .scheduleSelect{width:100%;height:43px;border:1px solid #e1e2ea;border-radius:10px;background:#fff;padding:0 12px;color:#292837;font-size:13px;font-weight:500;font-family:inherit;outline:none;transition:border-color .15s,box-shadow .15s;cursor:pointer}
-            .scheduleSelect:focus{border-color:#9b5cdb;box-shadow:0 0 0 3px rgba(122,27,216,.10)}
-            .scheduleFilterBottom{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:18px;padding-top:14px;border-top:1px solid #f0edf4;flex-wrap:wrap}
-            .scheduleFilterSummary{display:flex;align-items:center;gap:8px;color:#777487;font-size:12px}
-            .scheduleFilterSummary strong{color:#4b3a60;font-weight:700}
-            @media(max-width:900px){.scheduleFilterGrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-            @media(max-width:560px){.scheduleFilterCard{padding:18px}.scheduleFilterGrid{grid-template-columns:1fr;gap:16px}.scheduleFilterTop{margin-bottom:17px}}
-          `}</style>
-          <section className="panel scheduleFilterCard">
-            <div className="scheduleFilterTop">
-              <div className="scheduleFilterTitle"><span className="scheduleFilterIcon"><CalendarDays size={19}/></span><div><h3>Filtros do cronograma</h3><p>Personalize a agenda por prazo, responsável, área e status.</p></div></div>
-              <button className="secondary" style={{padding:"8px 12px",fontSize:12}} onClick={()=>{setScheduleOwnerFilter("Todos");setScheduleAreaFilter("Todas");setScheduleStatusFilter("Todos");setSchedulePeriod("all");setScheduleStartDate("");setScheduleEndDate("")}}>Limpar filtros</button>
-            </div>
-            <div className="scheduleFilterGrid">
-              <div><label className="scheduleFieldLabel" htmlFor="schedule-period">Período</label><select id="schedule-period" className="scheduleSelect" value={schedulePeriod} onChange={e=>setSchedulePeriod(e.target.value)}><option value="all">Todos os prazos</option><option value="7">Próximos 7 dias</option><option value="30">Próximos 30 dias</option><option value="overdue">Somente atrasadas</option><option value="custom">Personalizado</option></select></div>
-              <div><label className="scheduleFieldLabel" htmlFor="schedule-owner">Responsável</label><select id="schedule-owner" className="scheduleSelect" value={scheduleOwnerFilter} onChange={e=>setScheduleOwnerFilter(e.target.value)}><option value="Todos">Todos os colaboradores</option>{requestUsers.map(([id,name])=><option key={id} value={id}>{name}</option>)}{tasks.some(t=>t.areaAssignments.length>0&&t.areaAssignments.every(a=>!a.ownerId))&&<option value="Sem responsável">Sem responsável</option>}</select></div>
-              <div><label className="scheduleFieldLabel" htmlFor="schedule-area">Área</label><select id="schedule-area" className="scheduleSelect" value={scheduleAreaFilter} onChange={e=>setScheduleAreaFilter(e.target.value)}><option value="Todas">Todas as áreas</option>{areas.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
-              <div><label className="scheduleFieldLabel" htmlFor="schedule-status">Status</label><select id="schedule-status" className="scheduleSelect" value={scheduleStatusFilter} onChange={e=>setScheduleStatusFilter(e.target.value)}><option value="Todos">Todos os status</option>{(["Recebida","Em análise","Aguardando aprovação","Em execução","Concluída","Cancelada"] as Status[]).map(st=><option key={st} value={st}>{st}</option>)}</select></div>
-              {schedulePeriod==="custom"&&<><div><label className="scheduleFieldLabel" htmlFor="schedule-start-date">Data inicial</label><input id="schedule-start-date" className="scheduleSelect" type="date" value={scheduleStartDate} onChange={e=>setScheduleStartDate(e.target.value)} max={scheduleEndDate||undefined}/></div><div><label className="scheduleFieldLabel" htmlFor="schedule-end-date">Data final</label><input id="schedule-end-date" className="scheduleSelect" type="date" value={scheduleEndDate} onChange={e=>setScheduleEndDate(e.target.value)} min={scheduleStartDate||undefined}/></div></>}
-            </div>
-            <div className="scheduleFilterBottom"><span className="scheduleFilterSummary"><CalendarDays size={14}/> Visualização: <strong>{schedulePeriod==="all"?"Todos os prazos":schedulePeriod==="7"?"Próximos 7 dias":schedulePeriod==="30"?"Próximos 30 dias":schedulePeriod==="overdue"?"Somente atrasadas":`Personalizado${scheduleStartDate||scheduleEndDate?` · ${scheduleStartDate?new Date(scheduleStartDate+"T12:00:00").toLocaleDateString("pt-BR"):"início livre"} até ${scheduleEndDate?new Date(scheduleEndDate+"T12:00:00").toLocaleDateString("pt-BR"):"sem limite"}`:" · informe as datas"}`}</strong></span><span className="scheduleFilterSummary">{scheduleTasks.length} resultado(s)</span></div>
-          </section>
-          <div className="panel"><div className="panelHead"><div><h3>Agenda de entregas</h3><p>Ordenada pelo prazo mais próximo. Selecione uma demanda para abrir seus detalhes.</p></div></div>
-            <div className="timeline">{pageItems("schedule",scheduleTasks).map(t=><button className="timelineItem" key={t.id} onClick={()=>setSelected(t)}><div className="dateBlock"><b>{t.due?.slice(8,10)||"—"}</b><small>{t.due?new Date(t.due+"T12:00:00").toLocaleDateString("pt-BR",{month:"short"}):"Sem prazo"}</small></div><div className="timelineInfo"><b>{t.title}</b><small>{t.owner} · {t.area} · #{t.protocol}</small></div><div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>{t.status!=="Concluída"&&t.status!=="Cancelada"&&t.due&&t.due<scheduleToday&&<span className="status red">Atrasada</span>}<StatusBadge status={t.status}/></div></button>)}{!scheduleTasks.length&&<div className="emptyTable">Nenhuma solicitação encontrada com os filtros selecionados.</div>}</div><Pagination {...paginationProps("schedule",scheduleTasks.length)}/>
-          </div>
-        </>}
-        {active==="Colaboradores" && <><div className="pageHeading"><div><p className="eyebrow">EQUIPE</p><h1>Colaboradores</h1><p className="sub">Gerencie áreas, perfis e situação dos usuários cadastrados.</p></div><button className="secondary" onClick={()=>session?.user&&loadData(session.user)}><RefreshCw size={15}/> Atualizar lista</button></div>
-          <div className="panel"><div className="panelHead"><div><h3>Equipe cadastrada</h3><p>{members.length} colaborador(es) cadastrado(s)</p></div></div>
-            {profile?.role==="admin"&&<div className="notice">Para adicionar uma pessoa, primeiro crie o usuário em Supabase → Authentication → Users → Add user. O banco cria o perfil automaticamente. Depois atualize esta lista para gerenciar sua área e função.</div>}
-            <div className="memberGrid">{pageItems("members",members).map(m=><button className="memberCard memberButton" key={m.id} onClick={()=>{setSelectedMember(m);setMemberTaskStatus("Todas");setMemberForm({full_name:m.full_name,role:m.role,area_ids:m.area_ids||[],active:m.active,stock_manager:m.stock_manager===true});setMemberMessage("");setMemberEditing(false);setMemberConfirmOpen(false)}}><div className="userAvatar">{m.full_name.split(" ").map(x=>x[0]).slice(0,2).join("")}</div><b>{m.full_name}</b><small>{m.email||"Sem e-mail"}</small><small>{m.role==="admin"?"Administrador":m.role==="gestor"?"Gestor":"Colaborador"}</small><small>{(m.area_ids||[]).length ? areas.filter(a=>(m.area_ids||[]).includes(a.id)).map(a=>a.name).join(" · ") : "Área não definida"}</small></button>)}{!members.length&&<div className="emptyTable">Nenhum colaborador visível para este perfil.</div>}</div><Pagination {...paginationProps("members",members.length)}/>
-          </div></>}
-        {active==="Estoque" && <>
-          <div className="pageHeading">
-            <div><p className="eyebrow">MATERIAIS</p><h1>Estoque</h1><p className="sub">Controle de materiais promocionais, disponibilidade e movimentações.</p></div>
-            {canManageStock && <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
-              <button className="secondary" onClick={()=>loadStock()} disabled={stockLoading}><RefreshCw size={15}/> Atualizar</button>
-              {stockSection==="materiais" && <><button className="secondary" onClick={openNewMaterial}><Plus size={16}/> Novo material</button>
-              <button className="primary" onClick={()=>{setMovementError("");setMovementForm(old=>({...old,material_id:old.material_id||stockMaterials[0]?.id||""}));setShowStockMovement(true)}} disabled={!stockMaterials.length}><ArrowUpRight size={16}/> Nova movimentação</button></>}
-            </div>}
-          </div>
-          {stockError && <div className="errorBanner"><span>{stockError}</span><button onClick={()=>setStockError("")}>Fechar</button></div>}
-          {!canManageStock && <div className="notice" style={{marginBottom:16}}>Você possui acesso de consulta ao estoque. Para cadastrar materiais ou registrar movimentações, solicite ao administrador a permissão “Gerenciar Estoque”.</div>}
-          {canManageStock && <nav aria-label="Seções do estoque" style={{display:"flex",gap:8,flexWrap:"wrap",padding:6,marginBottom:18,border:"1px solid #e7e8ef",borderRadius:12,background:"#fff"}}>{[{id:"materiais",label:"Materiais",icon:<Package size={16}/>},{id:"alertas",label:"Alertas de estoque",icon:<AlertTriangle size={16}/>},{id:"consumo",label:"Análise de consumo",icon:<BarChart3 size={16}/>}].map(item=><button key={item.id} type="button" aria-pressed={stockSection===item.id} onClick={()=>setStockSection(item.id as "materiais"|"alertas"|"consumo")} style={{display:"inline-flex",alignItems:"center",justifyContent:"center",gap:8,padding:"10px 14px",border:stockSection===item.id?"1px solid #d8c2ef":"1px solid transparent",borderRadius:9,background:stockSection===item.id?"#f5edff":"transparent",color:stockSection===item.id?"#7020c5":"#686579",fontSize:13,fontWeight:stockSection===item.id?700:600,cursor:"pointer"}}>{item.icon}{item.label}</button>)}</nav>}
-          {canManageStock && stockSection==="materiais" && <>
-            <div className="stats">
-              <Stat icon={<Package/>} label="Materiais ativos" value={stockMaterials.length} tone="blue"/>
-              <Stat icon={<AlertTriangle/>} label="Abaixo do mínimo" value={stockMaterials.filter(m=>Number(m.quantity)-(reservedByMaterial[m.id]||0)<=Number(m.minimum_quantity)).length} tone="red"/>
-              <Stat icon={<Layers/>} label="Materiais com reserva" value={stockMaterials.filter(m=>(reservedByMaterial[m.id]||0)>0).length} tone="violet"/>
-              <Stat icon={<CheckCircle2/>} label="Com saldo disponível" value={stockMaterials.filter(m=>Number(m.quantity)-(reservedByMaterial[m.id]||0)>0).length} tone="green"/>
-            </div>
-            <div className="panel" style={{marginTop:18}}>
-              <div className="panelHead"><div><h3>Movimentações dos últimos 30 dias</h3><p>Quantidade de registros por tipo de movimentação no período.</p></div><span className="muted">{stockMovementSummary.total} registro(s)</span></div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(145px,1fr))",gap:12}}>
-                <Stat icon={<ArrowUpRight/>} label="Entradas" value={stockMovementSummary.entries} tone="green"/>
-                <Stat icon={<Activity/>} label="Saídas" value={stockMovementSummary.exits} tone="blue"/>
-                <Stat icon={<Layers/>} label="Reservas" value={stockMovementSummary.reservations} tone="violet"/>
-                <Stat icon={<RefreshCw/>} label="Cancelamentos de reserva" value={stockMovementSummary.reservationCancellations} tone="amber"/>
-                <Stat icon={<History/>} label="Ajustes" value={stockMovementSummary.adjustments} tone="blue"/>
-              </div>
-            </div>
-          </>}
-          {canManageStock && stockSection==="alertas" && <>
-            <div className="panel" style={{marginTop:18}}>
-              <div className="panelHead">
-                <div><h3>Alertas de estoque</h3><p>Materiais sem saldo disponível ou com saldo no limite/abaixo do estoque mínimo.</p></div>
-                <span className="muted">{stockAlerts.length} alerta(s)</span>
-              </div>
-              {stockAlerts.length === 0 ? <div className="emptyTable">Nenhum alerta. Todos os materiais estão acima do estoque mínimo.</div> : (
-                <div style={{display:"grid",gap:10}}>
-                  {pageItems("stockAlerts",stockAlerts).map(alert => {
-                    const color = alert.level === "critical" ? "#b42318" : alert.level === "warning" ? "#b54708" : "#7a5b00";
-                    const background = alert.level === "critical" ? "#fff1f0" : alert.level === "warning" ? "#fff7ed" : "#fffbeb";
-                    return <div key={alert.material.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:16,flexWrap:"wrap",padding:"13px 15px",border:"1px solid #eaecf0",borderRadius:10}}>
-                      <div style={{display:"flex",alignItems:"center",gap:10,minWidth:220,flex:"1 1 240px"}}>
-                        <span style={{width:9,height:9,borderRadius:99,background:color,flexShrink:0}}/>
-                        <div><b style={{display:"block",fontSize:14}}>{alert.material.name}</b><span className="muted" style={{fontSize:12}}>{alert.material.sku || "Sem código"}</span></div>
-                      </div>
-                      <span style={{fontSize:12,fontWeight:600,color,background,padding:"6px 9px",borderRadius:20}}>{alert.label}</span>
-                      <div style={{display:"flex",gap:18,flexWrap:"wrap",fontSize:12,color:"#475467"}}>
-                        <span>Disponível: <b>{alert.available.toLocaleString("pt-BR",{maximumFractionDigits:2})} {alert.material.unit}</b></span>
-                        <span>Reservado: <b>{alert.reserved.toLocaleString("pt-BR",{maximumFractionDigits:2})} {alert.material.unit}</b></span>
-                        <span>Mínimo: <b>{alert.minimum.toLocaleString("pt-BR",{maximumFractionDigits:2})} {alert.material.unit}</b></span>
-                      </div>
-                    </div>;
-                  })}
-                </div>
-              )}<Pagination {...paginationProps("stockAlerts",stockAlerts.length)}/>
-            </div>
-          </>}
-          {canManageStock && stockSection==="consumo" && <>
-            <style>{`
-              .stockReportGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(185px,1fr));gap:14px;align-items:start}
-              .stockReportFieldLabel{display:block;margin:0 0 9px;color:#565568;font-size:11px;font-weight:700;letter-spacing:.035em;text-transform:uppercase}
-              .stockReportControl{width:100%;height:43px;box-sizing:border-box;border:1px solid #e1e2ea;border-radius:10px;background:#fff;padding:0 12px;color:#292837;font-size:13px;font-weight:500;font-family:inherit;outline:none;transition:border-color .15s,box-shadow .15s}
-              .stockReportControl:focus{border-color:#9b5cdb;box-shadow:0 0 0 3px rgba(122,27,216,.10)}
-              @media(max-width:700px){.stockReportGrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-              @media(max-width:520px){.stockReportGrid{grid-template-columns:1fr}}
-            `}</style>
-            <section className="panel" style={{marginBottom:18,padding:22,border:"1px solid #e7e8ef",background:"linear-gradient(135deg,#fff 0%,#fcfbff 100%)"}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:14,flexWrap:"wrap",marginBottom:18}}>
-              <div style={{display:"flex",alignItems:"center",gap:11}}><span style={{width:38,height:38,display:"grid",placeItems:"center",borderRadius:12,background:"#f2eaff",color:"#7a1bd8"}}><BarChart3 size={19}/></span><div><h3 style={{margin:"0 0 4px",fontSize:15}}>Análise de consumo</h3><p style={{margin:0,fontSize:12,color:"#858397"}}>Acompanhe as saídas efetivas de materiais por período e identifique os itens de maior consumo.</p></div></div>
-              <button className="secondary" onClick={exportStockConsumption} disabled={!filteredConsumptionMovements.length}><Download size={15}/> Exportar CSV</button>
-            </div>
-            <div className="stockReportGrid" style={{marginBottom:18}}>
-              <div><label className="stockReportFieldLabel" htmlFor="consumption-material">Material</label><select id="consumption-material" className="stockReportControl" value={stockConsumptionMaterial} onChange={e=>setStockConsumptionMaterial(e.target.value)}><option value="Todos">Todos os materiais</option>{stockMaterials.map(material=><option key={material.id} value={material.id}>{material.name}</option>)}</select></div>
-              <div><label className="stockReportFieldLabel" htmlFor="consumption-start">Data inicial</label><input id="consumption-start" className="stockReportControl" type="date" value={stockConsumptionStart} max={stockConsumptionEnd||undefined} onChange={e=>setStockConsumptionStart(e.target.value)}/></div>
-              <div><label className="stockReportFieldLabel" htmlFor="consumption-end">Data final</label><input id="consumption-end" className="stockReportControl" type="date" value={stockConsumptionEnd} min={stockConsumptionStart||undefined} onChange={e=>setStockConsumptionEnd(e.target.value)}/></div>
-              <div style={{display:"flex",alignItems:"end"}}><button className="secondary" style={{width:"100%",height:43}} onClick={()=>{setStockConsumptionMaterial("Todos");setStockConsumptionStart("");setStockConsumptionEnd("")}}>Limpar filtros</button></div>
-            </div>
-            <div className="stats" style={{marginBottom:18}}><Stat icon={<History/>} label="Saídas registradas" value={stockConsumptionSummary.movements} tone="blue"/><Stat icon={<Package/>} label="Materiais consumidos" value={stockConsumptionSummary.materials} tone="violet"/><Stat icon={<Layers/>} label="Unidades de medida distintas" value={stockConsumptionSummary.units} tone="green"/></div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:16}}>
-              <div style={{border:"1px solid #eeeaf3",borderRadius:12,padding:16,minWidth:0}}><h4 style={{fontSize:13,margin:"0 0 5px"}}>Evolução mensal</h4><p style={{fontSize:11,color:"#858397",margin:"0 0 18px"}}>Número de saídas registradas nos últimos seis meses disponíveis no filtro.</p>
-                {!stockConsumptionByMonth.length?<div className="emptyTable">Sem saídas no período selecionado.</div>:<div style={{display:"grid",gap:13}}>{stockConsumptionByMonth.map(item=>{const max=Math.max(...stockConsumptionByMonth.map(entry=>entry.quantity),1);return <div key={item.month}><div style={{display:"flex",justifyContent:"space-between",gap:10,fontSize:12,marginBottom:6}}><span style={{color:"#565568",textTransform:"capitalize"}}>{item.label}</span><b>{item.quantity.toLocaleString("pt-BR",{maximumFractionDigits:0})}</b></div><div style={{height:9,background:"#f0edf5",borderRadius:99,overflow:"hidden"}}><div style={{height:"100%",width:`${Math.max(2,item.quantity/max*100)}%`,background:"linear-gradient(90deg,#9b5cdb,#7624c7)",borderRadius:99}}/></div></div>})}</div>}
-              </div>
-              <div style={{border:"1px solid #eeeaf3",borderRadius:12,padding:16,minWidth:0}}><h4 style={{fontSize:13,margin:"0 0 5px"}}>Materiais mais consumidos</h4><p style={{fontSize:11,color:"#858397",margin:"0 0 18px"}}>Ranking por quantidade total de saídas no período.</p>
-                {!stockConsumptionByMaterial.length?<div className="emptyTable">Sem consumo registrado no período.</div>:<div style={{display:"grid",gap:13}}>{stockConsumptionByMaterial.slice(0,5).map((item,index)=>{const max=Math.max(...stockConsumptionByMaterial.map(entry=>entry.quantity),1);return <div key={item.materialId}><div style={{display:"flex",justifyContent:"space-between",gap:10,fontSize:12,marginBottom:6}}><span style={{color:"#565568",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{index+1}. {item.material?.name||"Material não encontrado"}</span><b style={{whiteSpace:"nowrap"}}>{item.quantity.toLocaleString("pt-BR",{maximumFractionDigits:2})} {item.material?.unit||""}</b></div><div style={{height:9,background:"#f0edf5",borderRadius:99,overflow:"hidden"}}><div style={{height:"100%",width:`${Math.max(2,item.quantity/max*100)}%`,background:"#7a1bd8",borderRadius:99}}/></div></div>})}</div>}
-              </div>
-            </div>
-            <div style={{marginTop:18,border:"1px solid #eeeaf3",borderRadius:12,overflow:"hidden"}}><div style={{padding:"14px 16px",display:"flex",justifyContent:"space-between",gap:10,flexWrap:"wrap",borderBottom:"1px solid #eeeaf3"}}><div><h4 style={{fontSize:13,margin:"0 0 4px"}}>Detalhamento do consumo</h4><p style={{fontSize:11,color:"#858397",margin:0}}>Cada linha representa uma movimentação efetiva do tipo saída.</p></div><span className="muted">{filteredConsumptionMovements.length} registro(s)</span></div>
-              {!filteredConsumptionMovements.length?<div className="emptyTable">Nenhum consumo encontrado para os filtros selecionados.</div>:<div className="tableWrap"><table><thead><tr><th>Data</th><th>Material</th><th>Quantidade</th><th>Origem</th><th>Observações</th></tr></thead><tbody>{pageItems("stockConsumption",filteredConsumptionMovements).map(movement=>{const material=stockMaterials.find(item=>item.id===movement.material_id);const request=tasks.find(item=>item.id===movement.request_id);return <tr key={movement.id}><td>{new Date(movement.created_at).toLocaleString("pt-BR")}</td><td>{material?.name||"Material não encontrado"}</td><td><b>{Math.abs(Number(movement.quantity)||0).toLocaleString("pt-BR",{maximumFractionDigits:2})} {material?.unit||""}</b></td><td>{request?"Solicitação #"+request.protocol:movement.material_order_id?"Pedido de materiais":"Movimentação manual"}</td><td>{movement.notes||"—"}</td></tr>})}</tbody></table></div>}<Pagination {...paginationProps("stockConsumption",filteredConsumptionMovements.length)}/>
-            </div><p style={{fontSize:11,color:"#858397",margin:"12px 0 0"}}>Critério: somente movimentações do tipo saída entram no cálculo. Reservas, cancelamentos de reserva e ajustes não são considerados consumo.</p>
-          </section>
-          </>}
-          {stockSection==="materiais" && <div className="panel">
-            <div className="panelHead"><div><h3>Materiais cadastrados</h3><p>{canManageStock?"Estoque físico, reservas e saldo disponível.":"Consulta dos saldos físicos cadastrados."}</p></div><span className="muted">{filteredMaterials.length} material(is)</span></div>
-            <div className="toolbar">
-              <div className="search"><Search size={17}/><input placeholder="Buscar material ou código..." value={stockSearch} onChange={e=>setStockSearch(e.target.value)}/></div>
-              <span className="muted">{stockLoading?"Carregando estoque...":`${stockMaterials.length} ativo(s)`}</span>
-            </div>
-            {stockLoading ? <div className="emptyTable">Carregando materiais...</div> : !filteredMaterials.length ? <div className="emptyTable">Nenhum material cadastrado. {canManageStock?"Use “Novo material” para começar.":""}</div> :
-              <div className="tableWrap"><table><thead><tr><th>Material</th><th>Código</th><th>Estoque físico</th>{canManageStock&&<><th>Reservado</th><th>Disponível</th></>}<th>Estoque mínimo</th><th>Situação</th>{canManageStock&&<th>Ação</th>}</tr></thead><tbody>
-                {pageItems("materials",filteredMaterials).map(m=>{
-                  const reserved = reservedByMaterial[m.id] || 0;
-                  const available = Number(m.quantity)-reserved;
-                  const low = canManageStock && available <= Number(m.minimum_quantity);
-                  return <tr key={m.id}>
-                    <td><div style={{display:"flex",alignItems:"center",gap:10}}>{materialImageUrls[m.id]?<img src={materialImageUrls[m.id]} alt="" style={{width:44,height:44,objectFit:"cover",borderRadius:8,border:"1px solid #e7e8ef",flexShrink:0}}/>:<span style={{width:44,height:44,borderRadius:8,background:"#f5f1fa",display:"grid",placeItems:"center",color:"#8a62b1",flexShrink:0}}><Package size={18}/></span>}<div><b>{m.name}</b>{m.description&&<span style={{display:"block",fontSize:12,color:"#667085",marginTop:3}}>{m.description}</span>}</div></div></td>
-                    <td>{m.sku||"—"}</td>
-                    <td>{Number(m.quantity).toLocaleString("pt-BR",{maximumFractionDigits:2})} {m.unit}</td>
-                    {canManageStock&&<><td>{reserved.toLocaleString("pt-BR",{maximumFractionDigits:2})} {m.unit}</td><td><b>{available.toLocaleString("pt-BR",{maximumFractionDigits:2})} {m.unit}</b></td></>}
-                    <td>{Number(m.minimum_quantity).toLocaleString("pt-BR",{maximumFractionDigits:2})} {m.unit}</td>
-                    <td><span className={`status ${low?"red":"green"}`}>{low?"Estoque baixo":"Regular"}</span></td>
-                    {canManageStock&&<td><div style={{display:"flex",alignItems:"center",gap:10}}><button className="textButton" onClick={()=>openEditMaterial(m)}>Editar</button><button className="textButton" onClick={()=>{setMovementForm({material_id:m.id,movement_type:"entrada",quantity:"",request_id:"",notes:""});setShowStockMovement(true)}}>Movimentar</button></div></td>}
-                  </tr>;
-                })}
-              </tbody></table></div>}<Pagination {...paginationProps("materials",filteredMaterials.length)}/>
-          </div>}
-          {canManageStock && stockSection==="materiais" && <>
-            <style>{`
-              .stockReportFilters{padding:22px 24px;margin:18px 0;border:1px solid #e7e8ef;background:linear-gradient(135deg,#fff 0%,#fcfbff 100%);box-shadow:0 5px 18px rgba(31,24,55,.035)}
-              .stockReportTop{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:20px}
-              .stockReportTitle{display:flex;align-items:center;gap:11px}
-              .stockReportIcon{width:38px;height:38px;display:grid;place-items:center;border-radius:12px;background:#f2eaff;color:#7a1bd8;flex:none}
-              .stockReportTitle h3{margin:0 0 4px;font-size:15px;font-weight:700;color:#20202b}
-              .stockReportTitle p{margin:0;font-size:12px;color:#858397}
-              .stockReportClear{border:0;background:transparent;color:#7624c7;font-size:12px;font-weight:700;padding:9px 10px;border-radius:8px;cursor:pointer;white-space:nowrap}
-              .stockReportClear:hover{background:#f5edff}
-              .stockReportGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(185px,1fr));gap:14px;align-items:start}
-              .stockReportFieldLabel{display:block;margin:0 0 9px;color:#565568;font-size:11px;font-weight:700;letter-spacing:.035em;text-transform:uppercase}
-              .stockReportControl{width:100%;height:43px;border:1px solid #e1e2ea;border-radius:10px;background:#fff;padding:0 12px;color:#292837;font-size:13px;font-weight:500;font-family:inherit;outline:none;transition:border-color .15s,box-shadow .15s}
-              .stockReportControl:focus{border-color:#9b5cdb;box-shadow:0 0 0 3px rgba(122,27,216,.10)}
-              .stockReportBottom{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:18px;padding-top:14px;border-top:1px solid #f0edf4;flex-wrap:wrap}
-              .stockReportSummary{display:flex;align-items:center;gap:8px;color:#777487;font-size:12px}
-              .stockReportKpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px;margin:0 0 18px}
-              .stockReportPanel{padding:22px 24px}
-              .stockReportPanelHead{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:18px}
-              .stockReportPanelHead h3{margin:0 0 4px;font-size:15px}
-              .stockReportPanelHead p{margin:0;color:#858397;font-size:12px}
-              @media(max-width:1100px){.stockReportKpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
-              @media(max-width:700px){.stockReportFilters,.stockReportPanel{padding:18px}.stockReportKpis{grid-template-columns:repeat(2,minmax(0,1fr))}.stockReportTop{flex-direction:column}}
-              @media(max-width:420px){.stockReportKpis{grid-template-columns:1fr}}
-            `}</style>
-            <section className="panel stockReportFilters">
-              <div className="stockReportTop">
-                <div className="stockReportTitle"><span className="stockReportIcon"><CalendarDays size={19}/></span><div><h3>Relatório de movimentações</h3><p>Consulte e refine as entradas, saídas, ajustes e movimentações de reservas.</p></div></div>
-                <button className="secondary" style={{padding:"8px 12px",fontSize:12}} onClick={()=>{setStockReportMaterial("Todos");setStockReportType("Todos");setStockReportStart("");setStockReportEnd("")}}>Limpar filtros</button>
-              </div>
-              <div className="stockReportGrid">
-                <div><label className="stockReportFieldLabel" htmlFor="stock-report-material">Material</label><select id="stock-report-material" className="stockReportControl" value={stockReportMaterial} onChange={e=>setStockReportMaterial(e.target.value)}><option value="Todos">Todos os materiais</option>{stockMaterials.map(material=><option key={material.id} value={material.id}>{material.name}</option>)}</select></div>
-                <div><label className="stockReportFieldLabel" htmlFor="stock-report-type">Tipo de movimentação</label><select id="stock-report-type" className="stockReportControl" value={stockReportType} onChange={e=>setStockReportType(e.target.value)}><option value="Todos">Todos os tipos</option><option value="entrada">Entrada</option><option value="saida">Saída</option><option value="ajuste">Ajuste</option><option value="reserva">Reserva</option><option value="cancelamento_reserva">Cancelamento de reserva</option></select></div>
-                <div><label className="stockReportFieldLabel" htmlFor="stock-report-start">Data inicial</label><input id="stock-report-start" className="stockReportControl" type="date" value={stockReportStart} max={stockReportEnd||undefined} onChange={e=>setStockReportStart(e.target.value)}/></div>
-                <div><label className="stockReportFieldLabel" htmlFor="stock-report-end">Data final</label><input id="stock-report-end" className="stockReportControl" type="date" value={stockReportEnd} min={stockReportStart||undefined} onChange={e=>setStockReportEnd(e.target.value)}/></div>
-              </div>
-              <div className="stockReportBottom">
-                <span className="stockReportSummary"><CalendarDays size={14}/> {filteredStockMovements.length} movimentação(ões) no resultado</span>
-                <span className="stockReportSummary">Período personalizado conforme as datas selecionadas</span>
-              </div>
-            </section>
-            <div className="stockReportKpis">
-              <Stat icon={<History/>} label="Total de registros" value={stockReportSummary.total} tone="blue"/>
-              <Stat icon={<ArrowUpRight/>} label="Entradas" value={stockReportSummary.entries} tone="green"/>
-              <Stat icon={<Activity/>} label="Saídas" value={stockReportSummary.exits} tone="blue"/>
-              <Stat icon={<RefreshCw/>} label="Ajustes" value={stockReportSummary.adjustments} tone="amber"/>
-              <Stat icon={<Layers/>} label="Reservas e cancelamentos" value={stockReportSummary.reservations} tone="violet"/>
-            </div>
-            <section className="panel stockReportPanel">
-              <div className="stockReportPanelHead">
-                <div><h3>Detalhamento das movimentações</h3><p>Registros que compõem os indicadores acima.</p></div>
-                <button className="secondary" onClick={exportStockMovements} disabled={!filteredStockMovements.length}><Download size={15}/> Exportar CSV</button>
-              </div>
-              {!filteredStockMovements.length ? <div className="emptyTable">Nenhuma movimentação encontrada para os filtros selecionados.</div> :
-                <div className="tableWrap"><table><thead><tr><th>Data</th><th>Material</th><th>Tipo</th><th>Quantidade</th><th>Origem</th><th>Observações</th></tr></thead><tbody>
-                  {pageItems("stockMovements",filteredStockMovements).map(m=>{
-                    const material=stockMaterials.find(item=>item.id===m.material_id);
-                    const request=tasks.find(item=>item.id===m.request_id);
-                    const labels:Record<string,string>={entrada:"Entrada",saida:"Saída",reserva:"Reserva",cancelamento_reserva:"Cancelamento de reserva",ajuste:"Ajuste"};
-                    return <tr key={m.id}>
-                      <td>{new Date(m.created_at).toLocaleString("pt-BR")}</td>
-                      <td>{material?.name||"Material não encontrado"}</td>
-                      <td>{labels[m.movement_type]||m.movement_type}</td>
-                      <td><b>{m.movement_type==="ajuste"&&Number(m.quantity)>0?"+":""}{Number(m.quantity).toLocaleString("pt-BR",{maximumFractionDigits:2})} {material?.unit||""}</b></td>
-                      <td>{request?"Solicitação #"+request.protocol:m.material_order_id?"Pedido de materiais":"Movimentação manual"}</td>
-                      <td>{m.notes||"—"}</td>
-                    </tr>;
-                  })}
-                </tbody></table></div>}<Pagination {...paginationProps("stockMovements",filteredStockMovements.length)}/>
-            </section>
-          </>}
-        </>}
-        {active==="Relatórios" && <>
-          <div className="pageHeading" style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:16,flexWrap:"wrap"}}><div><p className="eyebrow">ANÁLISE GERENCIAL</p><h1>Relatórios</h1><p className="sub">Acompanhe resultados, produtividade e distribuição das demandas.</p></div><button type="button" className="secondary" onClick={exportReports}><Download size={16}/> Exportar relatório</button></div>
-          <style>{`
-            .reportKpiGrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-top:18px}
-            .reportFilterCard{padding:22px 24px;margin-bottom:18px;border:1px solid #e7e8ef;background:linear-gradient(135deg,#fff 0%,#fcfbff 100%);box-shadow:0 5px 18px rgba(31,24,55,.035)}
-            .reportFilterTop{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:20px}
-            .reportFilterTitle{display:flex;align-items:center;gap:11px}.reportFilterIcon{width:38px;height:38px;display:grid;place-items:center;border-radius:12px;background:#f2eaff;color:#7a1bd8;flex:none}
-            .reportFilterTitle h3{margin:0 0 4px;font-size:15px;font-weight:700;color:#20202b}.reportFilterTitle p{margin:0;font-size:12px;color:#858397}
-            .reportClear{border:0;background:transparent;color:#7624c7;font-size:12px;font-weight:700;padding:9px 10px;border-radius:8px;cursor:pointer;white-space:nowrap}.reportClear:hover{background:#f5edff}
-            .reportFilterGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(185px,1fr));gap:14px;align-items:start}
-            .reportFieldLabel{display:block;margin:0 0 9px;color:#565568;font-size:11px;font-weight:700;letter-spacing:.035em;text-transform:uppercase}
-            .reportSelect,.reportDate{width:100%;height:43px;border:1px solid #e1e2ea;border-radius:10px;background:#fff;padding:0 12px;color:#292837;font-size:13px;font-weight:500;font-family:inherit;outline:none;transition:border-color .15s,box-shadow .15s}.reportSelect:focus,.reportDate:focus{border-color:#9b5cdb;box-shadow:0 0 0 3px rgba(122,27,216,.10)}
-            .reportPeriodOptions{display:flex;flex-wrap:wrap;gap:7px}.reportPeriodButton{border:1px solid #e5e2eb;background:#fff;color:#686579;border-radius:9px;padding:10px 12px;font-size:12px;font-weight:600;cursor:pointer}.reportPeriodButton.active{border-color:#7a1bd8;background:#f5edff;color:#7020c5}
-            .reportCustomDates{display:grid;grid-template-columns:repeat(2,minmax(150px,1fr));gap:12px;margin-top:16px;padding:14px;background:#faf8fd;border:1px solid #eee8f5;border-radius:12px}
-            .reportFilterBottom{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:18px;padding-top:14px;border-top:1px solid #f0edf4;flex-wrap:wrap}.reportSummary{display:flex;align-items:center;gap:8px;color:#777487;font-size:12px}
-            .reportPanel{padding:22px 24px}.reportPanelHead{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:18px}.reportPanelHead h3{margin:0 0 4px;font-size:15px}.reportPanelHead p{margin:0;color:#858397;font-size:12px}
-            .reportBars{display:grid;gap:15px}.reportBarRow>div:first-child{display:flex;justify-content:space-between;gap:12px;margin-bottom:7px;color:#555267;font-size:12px}.reportBarTrack{height:9px;background:#f0edf5;border-radius:99px;overflow:hidden}.reportBarTrack i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#9b5cdb,#7624c7)}
-            .reportRate{display:flex;align-items:center;gap:16px}.reportRate strong{font-size:30px;color:#272235}.reportRate span{font-size:12px;color:#858397}
-            @media(max-width:900px){.reportKpiGrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-            @media(max-width:600px){.reportFilterCard,.reportPanel{padding:18px}.reportCustomDates{grid-template-columns:1fr}.reportPeriodButton{flex:1 1 calc(50% - 7px)}}
-          `}</style>
-          <section className="panel reportFilterCard">
-            <div className="reportFilterTop"><div className="reportFilterTitle"><span className="reportFilterIcon"><CalendarDays size={19}/></span><div><h3>Filtros dos relatórios</h3><p>Selecione o período e refine os dados que deseja analisar.</p></div></div><button className="secondary" style={{padding:"8px 12px",fontSize:12}} onClick={()=>{setReportDateMode("created");setReportPeriod("all");setReportStartDate("");setReportEndDate("");setReportAreaFilter("Todas");setReportOwnerFilter("Todos");setReportStatusFilter("Todos")}}>Limpar filtros</button></div>
-            <div className="reportFilterGrid">
-              <div><label className="reportFieldLabel" htmlFor="report-date-mode">Considerar data</label><select id="report-date-mode" className="reportSelect" value={reportDateMode} onChange={e=>setReportDateMode(e.target.value as "created"|"completed"|"due")}><option value="created">Data de abertura</option><option value="completed">Data de conclusão</option><option value="due">Data do prazo</option></select></div>
-              <div><label className="reportFieldLabel" htmlFor="report-area">Área</label><select id="report-area" className="reportSelect" value={reportAreaFilter} onChange={e=>setReportAreaFilter(e.target.value)}><option value="Todas">Todas as áreas</option>{areas.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
-              <div><label className="reportFieldLabel" htmlFor="report-owner">Responsável</label><select id="report-owner" className="reportSelect" value={reportOwnerFilter} onChange={e=>setReportOwnerFilter(e.target.value)}><option value="Todos">Todos os colaboradores</option>{requestUsers.map(([id,name])=><option key={id} value={id}>{name}</option>)}{tasks.some(t=>t.areaAssignments.length>0&&t.areaAssignments.every(a=>!a.ownerId))&&<option value="Sem responsável">Sem responsável</option>}</select></div>
-              <div><label className="reportFieldLabel" htmlFor="report-status">Status</label><select id="report-status" className="reportSelect" value={reportStatusFilter} onChange={e=>setReportStatusFilter(e.target.value)}><option value="Todos">Todos os status</option>{(["Recebida","Em análise","Aguardando aprovação","Em execução","Concluída","Cancelada"] as Status[]).map(status=><option key={status} value={status}>{status}</option>)}</select></div>
-            </div>
-            <div style={{marginTop:17}}><span className="reportFieldLabel">Período de análise</span><div className="reportPeriodOptions">{[{value:"all",label:"Todo o período"},{value:"month",label:"Este mês"},{value:"30",label:"Últimos 30 dias"},{value:"90",label:"Últimos 90 dias"},{value:"year",label:"Este ano"},{value:"custom",label:"Personalizado"}].map(option=><button key={option.value} type="button" className={`reportPeriodButton ${reportPeriod===option.value?"active":""}`} aria-pressed={reportPeriod===option.value} onClick={()=>setReportPeriod(option.value)}>{option.label}</button>)}</div></div>
-            {reportPeriod==="custom"&&<div className="reportCustomDates"><div><label className="reportFieldLabel" htmlFor="report-start">Data inicial</label><input id="report-start" className="reportDate" type="date" value={reportStartDate} onChange={e=>setReportStartDate(e.target.value)}/></div><div><label className="reportFieldLabel" htmlFor="report-end">Data final</label><input id="report-end" className="reportDate" type="date" min={reportStartDate||undefined} value={reportEndDate} onChange={e=>setReportEndDate(e.target.value)}/></div></div>}
-            {reportPeriod==="custom"&&reportStartDate&&reportEndDate&&reportStartDate>reportEndDate&&<p style={{color:"#b42318",fontSize:12,marginTop:10}}>A data inicial não pode ser posterior à data final.</p>}
-            {reportDateMode==="completed"&&<p className="dashFilterNote">A análise por conclusão utiliza a data registrada quando a solicitação foi concluída. Solicitações concluídas antes da ativação desse registro podem não aparecer nesse filtro.</p>}
-            <div className="reportFilterBottom"><span className="reportSummary"><CalendarDays size={14}/> Critério: <strong>{reportDateLabel}</strong></span><span className="reportSummary">{reportTasks.length} solicitação(ões) no resultado</span></div>
-          </section>
-          <div className="reportKpiGrid"><Stat icon={<ClipboardList/>} label="Total de solicitações" value={reportTasks.length} tone="blue"/><Stat icon={<Clock3/>} label="Recebidas" value={reportReceived} tone="blue"/><Stat icon={<Activity/>} label="Em análise" value={reportAnalysis} tone="violet"/><Stat icon={<Clock3/>} label="Aguardando aprovação" value={reportAwaitingApproval} tone="violet"/><Stat icon={<Activity/>} label="Em execução" value={reportExecuting} tone="violet"/><Stat icon={<CheckCircle2/>} label="Concluídas" value={reportDone} tone="green"/><Stat icon={<X/>} label="Canceladas" value={reportCancelled} tone="red"/><Stat icon={<AlertTriangle/>} label="Atrasadas" value={reportLate} tone="red"/></div>
-          <div className="gridMain" style={{marginTop:18}}>
-            <section className="panel reportPanel"><div className="reportPanelHead"><div><h3>Distribuição por status</h3><p>Volume de solicitações em cada etapa</p></div></div><div className="reportBars">{(["Recebida","Em análise","Aguardando aprovação","Em execução","Concluída","Cancelada"] as Status[]).map(status=>{const count=reportTasks.filter(t=>t.status===status).length;return <div className="reportBarRow" key={status}><div><span>{status}</span><b>{count}</b></div><div className="reportBarTrack"><i style={{width:`${reportTasks.length?count/reportTasks.length*100:0}%`}}/></div></div>})}</div></section>
-            <section className="panel reportPanel"><div className="reportPanelHead"><div><h3>Distribuição por área</h3><p>Participação de cada área no volume total</p></div></div>{!reportByArea.length?<div className="emptyTable">Não há solicitações no período selecionado.</div>:<div className="reportBars">{reportByArea.map(item=><div className="reportBarRow" key={item.name}><div><span>{item.name}</span><b>{item.total}</b></div><div className="reportBarTrack"><i style={{width:`${reportTasks.length?item.total/reportTasks.length*100:0}%`}}/></div></div>)}</div>}</section>
-          </div>
-          <div className="gridMain" style={{marginTop:18}}>
-            <section className="panel reportPanel"><div className="reportPanelHead"><div><h3>Desempenho da equipe</h3><p>Solicitações atribuídas por responsável</p></div></div>{!reportByOwner.length?<div className="emptyTable">Não há solicitações atribuídas no período.</div>:<div className="tableWrap"><table><thead><tr><th>Responsável</th><th>Total</th><th>Concluídas</th><th>Em andamento</th><th>Atrasadas</th></tr></thead><tbody>{pageItems("reportOwners",reportByOwner).map(person=><tr key={person.id}><td><b>{person.name}</b></td><td>{person.total}</td><td>{person.done}</td><td>{person.inProgress}</td><td>{person.late}</td></tr>)}</tbody></table></div>}<Pagination {...paginationProps("reportOwners",reportByOwner.length)}/></section>
-            <section className="panel reportPanel"><div className="reportPanelHead"><div><h3>Taxa de conclusão</h3><p>Percentual de demandas concluídas no resultado filtrado</p></div></div><div className="reportRate"><strong>{reportCompletionRate}%</strong><span>{reportDone} de {reportCompletionBase} solicitações válidas concluídas</span></div><div className="reportBarTrack" style={{marginTop:16,height:12}}><i style={{display:"block",height:"100%",width:`${reportCompletionRate}%`,borderRadius:99,background:"linear-gradient(90deg,#9b5cdb,#7624c7)"}}/></div><div style={{marginTop:22,paddingTop:18,borderTop:"1px solid #f0edf4"}}><div className="reportPanelHead"><div><h3>Solicitações em atraso</h3><p>{reportLate} de {reportOpenBase} solicitações abertas estão com prazo vencido</p></div><strong style={{fontSize:24,color:"#b42318"}}>{reportOverdueRate}%</strong></div><div className="reportBarTrack" style={{height:10}}><i style={{display:"block",height:"100%",width:`${reportOverdueRate}%`,borderRadius:99,background:"#d92d20"}}/></div></div></section>
-          </div>
-          <section className="panel reportPanel" style={{marginTop:18}}><div className="reportPanelHead"><div><h3>Detalhamento das solicitações</h3><p>Consulte os registros que compõem os indicadores acima.</p></div></div><TaskTable tasks={pageItems("reportTasks",[...reportTasks].sort((a,b)=>b.created.localeCompare(a.created)))} onSelect={setSelected} unreadCounts={unreadCounts}/><Pagination {...paginationProps("reportTasks",reportTasks.length)}/></section>
-        </>}
-        {active==="Configurações" && <><div className="pageHeading"><div><p className="eyebrow">ADMINISTRAÇÃO</p><h1>Configurações</h1><p className="sub">Parâmetros do ambiente e sua conta.</p></div></div><div className="panel"><h3>Áreas cadastradas no Supabase</h3><div className="areaList">{areaNames.map(a=><div key={a}><Layers size={17}/>{a}<span>Ativa</span></div>)}</div><p className="notice">Usuário conectado: {profile?.email}. Perfil: {profile?.role}. A prioridade é controlada por gestores e administradores.</p></div></>}
-        {active==="Auditoria" && profile?.role==="admin" && <>
-          <div className="pageHeading"><div><p className="eyebrow">CONTROLE E RASTREABILIDADE</p><h1>Auditoria</h1><p className="sub">Consulte as ações realizadas nos módulos operacionais e administrativos.</p></div><button className="secondary" type="button" onClick={()=>void loadAuditLogs()} disabled={auditLoading}><RefreshCw size={15}/> {auditLoading?"Atualizando...":"Atualizar histórico"}</button></div>
-          <style>{`
-            .auditFilterCard{padding:22px 24px;margin-bottom:18px;border:1px solid #e7e8ef;background:linear-gradient(135deg,#fff 0%,#fcfbff 100%);box-shadow:0 5px 18px rgba(31,24,55,.035)}
-            .auditFilterTop{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:18px}
-            .auditFilterTitle{display:flex;align-items:center;gap:11px}
-            .auditFilterIcon{width:38px;height:38px;display:grid;place-items:center;border-radius:12px;background:#f2eaff;color:#7a1bd8;flex:none}
-            .auditFilterTitle h3{margin:0 0 4px;font-size:15px;font-weight:700;color:#20202b}
-            .auditFilterTitle p{margin:0;font-size:12px;color:#858397}
-            .auditFilterGrid{display:grid;grid-template-columns:minmax(220px,1.5fr) repeat(3,minmax(145px,1fr));gap:12px;align-items:end}
-            .auditField{display:grid;gap:7px;min-width:0;color:#565568;font-size:11px;font-weight:700}
-            .auditControl{width:100%;height:42px;box-sizing:border-box;border:1px solid #e1e2ea;border-radius:10px;background:#fff;padding:0 11px;color:#292837;font:500 13px inherit;outline:none}
-            .auditControl:focus{border-color:#9b5cdb;box-shadow:0 0 0 3px rgba(122,27,216,.10)}
-            .auditDateGrid{display:grid;grid-template-columns:repeat(2,minmax(150px,1fr));gap:12px;margin-top:14px}
-            .auditFilterBottom{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:16px;padding-top:13px;border-top:1px solid #f0edf4;color:#777487;font-size:12px}
-            .auditTableWrap{overflow:auto;width:100%}.auditTable{width:100%;border-collapse:collapse;min-width:900px}
-            .auditTable th{padding:12px 13px;text-align:left;background:#faf9fc;color:#777487;font-size:10px;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap}
-            .auditTable td{padding:13px;border-top:1px solid #f0edf4;color:#454253;font-size:12px;vertical-align:top}
-            .auditActor{display:grid;gap:3px;min-width:145px}.auditActor b{color:#292536;font-size:12px}.auditActor small{color:#858397;font-size:10px}
-            .auditAction{display:inline-flex;padding:5px 8px;border-radius:7px;background:#f2eaff;color:#7020c5;font-size:10px;font-weight:800}.auditAction.delete{background:#fff0f0;color:#b42318}.auditAction.insert{background:#ecfdf3;color:#027a48}
-            .auditDetails{min-width:250px}.auditDetails summary{color:#7020c5;font-weight:700;cursor:pointer;list-style:none}.auditDetails summary::-webkit-details-marker{display:none}
-            .auditDiff{display:grid;gap:7px;margin-top:10px;max-width:430px}.auditDiffRow{padding:8px 9px;border:1px solid #eee8f5;border-radius:8px;background:#fcfbfe;overflow-wrap:anywhere}.auditDiffRow b{display:block;margin-bottom:4px;color:#5b5368;font-size:10px}.auditDiffRow span{display:block;color:#454253;font-size:11px;line-height:1.45}
-            .auditEmpty{padding:32px 18px;text-align:center;color:#858397;font-size:13px}
-            @media(max-width:900px){.auditFilterGrid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:560px){.auditFilterCard{padding:17px}.auditFilterGrid,.auditDateGrid{grid-template-columns:1fr}.auditFilterTop{flex-direction:column}}
-          `}</style>
-          <section className="panel auditFilterCard">
-            <div className="auditFilterTop"><div className="auditFilterTitle"><span className="auditFilterIcon"><FileSearch size={19}/></span><div><h3>Filtros do histórico</h3><p>Refine os registros por período, colaborador, módulo ou operação.</p></div></div><button type="button" className="secondary" style={{padding:"8px 12px",fontSize:12}} onClick={()=>{setAuditSearch("");setAuditActorFilter("Todos");setAuditModuleFilter("Todos");setAuditActionFilter("Todos");setAuditStartDate("");setAuditEndDate("")}}>Limpar filtros</button></div>
-            <div className="auditFilterGrid">
-              <label className="auditField">Buscar registro<input className="auditControl" value={auditSearch} onChange={e=>setAuditSearch(e.target.value)} placeholder="Nome, e-mail ou identificador..."/></label>
-              <label className="auditField">Colaborador<select className="auditControl" value={auditActorFilter} onChange={e=>setAuditActorFilter(e.target.value)}><option value="Todos">Todos</option>{auditActors.map(actor=><option key={actor} value={actor}>{actor}</option>)}</select></label>
-              <label className="auditField">Módulo<select className="auditControl" value={auditModuleFilter} onChange={e=>setAuditModuleFilter(e.target.value)}><option value="Todos">Todos</option>{auditModules.map(module=><option key={module} value={module}>{module.replaceAll("_"," ")}</option>)}</select></label>
-              <label className="auditField">Tipo de ação<select className="auditControl" value={auditActionFilter} onChange={e=>setAuditActionFilter(e.target.value)}><option value="Todos">Todas</option><option value="INSERT">Inclusão</option><option value="UPDATE">Alteração</option><option value="DELETE">Exclusão</option></select></label>
-            </div>
-            <div className="auditDateGrid"><label className="auditField">Data inicial<input className="auditControl" type="date" value={auditStartDate} onChange={e=>setAuditStartDate(e.target.value)}/></label><label className="auditField">Data final<input className="auditControl" type="date" min={auditStartDate||undefined} value={auditEndDate} onChange={e=>setAuditEndDate(e.target.value)}/></label></div>
-            <div className="auditFilterBottom"><span><b>{filteredAuditLogs.length}</b> registro(s) exibido(s)</span><span>Consulta dos 500 registros mais recentes</span></div>
-          </section>
-          {auditError&&<div className="errorBanner" style={{marginBottom:16}}>{auditError}</div>}
-          <section className="panel">
-            <div className="panelHead"><div><h3>Histórico de operações</h3><p>Valores anteriores e novos ficam disponíveis em cada registro.</p></div><span className="muted">{auditLogs.length} carregados</span></div>
-            {auditLoading&&!auditLogs.length?<div className="auditEmpty">Carregando histórico de auditoria...</div>:!filteredAuditLogs.length?<div className="auditEmpty">Nenhum registro encontrado com os filtros selecionados.</div>:<div className="auditTableWrap"><table className="auditTable"><thead><tr><th>Data e hora</th><th>Colaborador</th><th>Ação</th><th>Módulo</th><th>Registro</th><th>Detalhes</th></tr></thead><tbody>
-              {pageItems("audit",filteredAuditLogs).map(log=>{
-                const oldValues=log.old_values||{};const newValues=log.new_values||{};
-                const keys=[...new Set([...Object.keys(oldValues),...Object.keys(newValues)])].filter(key=>!["created_at","updated_at"].includes(key));
-                const displayValue=(value:any)=>value===null||value===undefined?"—":typeof value==="object"?JSON.stringify(value):String(value);
-                const changes=keys.filter(key=>JSON.stringify(oldValues[key])!==JSON.stringify(newValues[key]));
-                return <tr key={log.id}><td style={{whiteSpace:"nowrap"}}>{new Date(log.created_at).toLocaleString("pt-BR")}</td><td><div className="auditActor"><b>{log.actor_name||"Sistema"}</b><small>{log.actor_email||"Ação automática"}</small></div></td><td><span className={`auditAction ${log.action.toLowerCase()}`}>{log.action==="INSERT"?"Inclusão":log.action==="UPDATE"?"Alteração":"Exclusão"}</span></td><td style={{whiteSpace:"nowrap",textTransform:"capitalize"}}>{log.table_name.replaceAll("_"," ")}</td><td style={{fontFamily:"monospace",fontSize:10}}>{log.record_id||"—"}</td><td><button type="button" onClick={()=>setSelectedAuditLog(log)} style={{border:0,background:"transparent",padding:0,color:"#7a1bd8",fontWeight:700,fontSize:12,cursor:"pointer",whiteSpace:"nowrap"}}>Ver {changes.length||keys.length} campo(s)</button></td></tr>;
-              })}
-            </tbody></table></div>}<Pagination {...paginationProps("audit",filteredAuditLogs.length)}/>
-          </section>
-        </>}
-      </div>
-        <footer className="appFooter">
-          <span>© 2026 DelRio. Todos os direitos reservados.</span>
-          <span><strong>Gestão de Demandas de Marketing</strong> · Sistema interno · Versão 1.0.0</span>
-          <span>Developed by: Johnata Paiva</span>
-        </footer>
-    </section>
-    {selectedAuditLog&&<div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setSelectedAuditLog(null)}}><div className="modal" style={{width:"min(760px,94vw)",maxHeight:"86vh",overflowY:"auto",boxSizing:"border-box"}}><div className="modalHead"><div><p className="eyebrow">DETALHES DA AUDITORIA</p><h2>{selectedAuditLog.action==="INSERT"?"Inclusão":selectedAuditLog.action==="UPDATE"?"Alteração":"Exclusão"} · {selectedAuditLog.table_name.replaceAll("_"," ")}</h2><p>{new Date(selectedAuditLog.created_at).toLocaleString("pt-BR")}</p></div><button className="iconButton" onClick={()=>setSelectedAuditLog(null)} aria-label="Fechar detalhes"><X/></button></div><div className="detailGrid" style={{marginBottom:18}}><div><small>Colaborador</small><b>{selectedAuditLog.actor_name||"Sistema"}</b></div><div><small>E-mail</small><b>{selectedAuditLog.actor_email||"Ação automática"}</b></div><div style={{gridColumn:"1 / -1"}}><small>Registro</small><b style={{fontFamily:"monospace",fontSize:11,overflowWrap:"anywhere"}}>{selectedAuditLog.record_id||"—"}</b></div></div><div style={{display:"grid",gap:10}}>{(()=>{const oldValues=selectedAuditLog.old_values||{};const newValues=selectedAuditLog.new_values||{};const keys=[...new Set([...Object.keys(oldValues),...Object.keys(newValues)])].filter(key=>!["created_at","updated_at"].includes(key));const visibleKeys=(selectedAuditLog.action==="INSERT"?Object.keys(newValues):selectedAuditLog.action==="DELETE"?Object.keys(oldValues):keys.filter(key=>JSON.stringify(oldValues[key])!==JSON.stringify(newValues[key]))).filter(key=>!["created_at","updated_at"].includes(key));const displayValue=(value:any)=>value===null||value===undefined?"—":typeof value==="object"?JSON.stringify(value):String(value);return visibleKeys.length?visibleKeys.map(key=><div key={key} style={{padding:"12px 14px",border:"1px solid #e8e3ef",borderRadius:11,background:"#fcfbfe",display:"grid",gap:7}}><b style={{fontSize:12,color:"#4b3b5f",textTransform:"capitalize"}}>{key.replaceAll("_"," ")}</b>{selectedAuditLog.action==="INSERT"?<div style={{fontSize:13,color:"#454253",overflowWrap:"anywhere"}}><span style={{color:"#7a1bd8",fontWeight:700}}>Novo valor:</span> {displayValue(newValues[key])}</div>:selectedAuditLog.action==="DELETE"?<div style={{fontSize:13,color:"#454253",overflowWrap:"anywhere"}}><span style={{color:"#b42318",fontWeight:700}}>Valor removido:</span> {displayValue(oldValues[key])}</div>:<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:8}}><div style={{padding:10,borderRadius:8,background:"#f3f3f6",fontSize:13,overflowWrap:"anywhere"}}><small style={{display:"block",color:"#777486",fontWeight:700,marginBottom:4}}>ANTERIOR</small>{displayValue(oldValues[key])}</div><div style={{padding:10,borderRadius:8,background:"#f5edff",fontSize:13,overflowWrap:"anywhere"}}><small style={{display:"block",color:"#7a1bd8",fontWeight:700,marginBottom:4}}>NOVO</small>{displayValue(newValues[key])}</div></div>}</div>):<div className="auditEmpty">Não há campos detalhados neste registro.</div>})()}</div><div className="modalActions"><button className="secondary" onClick={()=>setSelectedAuditLog(null)}>Fechar</button></div></div></div>}
+  return <MainLayout
+    sidebarProps={{
+      active,
+      onNavigate: (name) => {
+        setActive(name);
+        setSelected(null);
+      },
+      mobileOpen: mobileMenu,
+      onClose: () => setMobileMenu(false),
+      taskCount: tasks.length,
+      userName: profile?.full_name ?? null,
+      userRole: profile?.role ?? null,
+      onSignOut: signOut,
+    }}
+    headerProps={{
+      active,
+      onOpenMenu: () => setMobileMenu(true),
+      userName: profile?.full_name ?? null,
+      dataLoading,
+      notifications,
+      notificationsLoading,
+      notificationsError,
+      showNotifications,
+      unreadNotificationCount,
+      onToggleNotifications: () => setShowNotifications(old => !old),
+      onCloseNotifications: () => setShowNotifications(false),
+      onMarkAllRead: markAllNotificationsRead,
+      onOpenNotification: openNotification,
+      paginationProps: paginationProps("notifications", notifications.length),
+    }}
+    overlays={
+      <>
+{selectedAuditLog&&<div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setSelectedAuditLog(null)}}><div className="modal" style={{width:"min(760px,94vw)",maxHeight:"86vh",overflowY:"auto",boxSizing:"border-box"}}><div className="modalHead"><div><p className="eyebrow">DETALHES DA AUDITORIA</p><h2>{selectedAuditLog.action==="INSERT"?"Inclusão":selectedAuditLog.action==="UPDATE"?"Alteração":"Exclusão"} · {selectedAuditLog.table_name.replaceAll("_"," ")}</h2><p>{new Date(selectedAuditLog.created_at).toLocaleString("pt-BR")}</p></div><button className="iconButton" onClick={()=>setSelectedAuditLog(null)} aria-label="Fechar detalhes"><X/></button></div><div className="detailGrid" style={{marginBottom:18}}><div><small>Colaborador</small><b>{selectedAuditLog.actor_name||"Sistema"}</b></div><div><small>E-mail</small><b>{selectedAuditLog.actor_email||"Ação automática"}</b></div><div style={{gridColumn:"1 / -1"}}><small>Registro</small><b style={{fontFamily:"monospace",fontSize:11,overflowWrap:"anywhere"}}>{selectedAuditLog.record_id||"—"}</b></div></div><div style={{display:"grid",gap:10}}>{(()=>{const oldValues=selectedAuditLog.old_values||{};const newValues=selectedAuditLog.new_values||{};const keys=[...new Set([...Object.keys(oldValues),...Object.keys(newValues)])].filter(key=>!["created_at","updated_at"].includes(key));const visibleKeys=(selectedAuditLog.action==="INSERT"?Object.keys(newValues):selectedAuditLog.action==="DELETE"?Object.keys(oldValues):keys.filter(key=>JSON.stringify(oldValues[key])!==JSON.stringify(newValues[key]))).filter(key=>!["created_at","updated_at"].includes(key));const displayValue=(value:any)=>value===null||value===undefined?"—":typeof value==="object"?JSON.stringify(value):String(value);return visibleKeys.length?visibleKeys.map(key=><div key={key} style={{padding:"12px 14px",border:"1px solid #e8e3ef",borderRadius:11,background:"#fcfbfe",display:"grid",gap:7}}><b style={{fontSize:12,color:"#4b3b5f",textTransform:"capitalize"}}>{key.replaceAll("_"," ")}</b>{selectedAuditLog.action==="INSERT"?<div style={{fontSize:13,color:"#454253",overflowWrap:"anywhere"}}><span style={{color:"#7a1bd8",fontWeight:700}}>Novo valor:</span> {displayValue(newValues[key])}</div>:selectedAuditLog.action==="DELETE"?<div style={{fontSize:13,color:"#454253",overflowWrap:"anywhere"}}><span style={{color:"#b42318",fontWeight:700}}>Valor removido:</span> {displayValue(oldValues[key])}</div>:<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:8}}><div style={{padding:10,borderRadius:8,background:"#f3f3f6",fontSize:13,overflowWrap:"anywhere"}}><small style={{display:"block",color:"#777486",fontWeight:700,marginBottom:4}}>ANTERIOR</small>{displayValue(oldValues[key])}</div><div style={{padding:10,borderRadius:8,background:"#f5edff",fontSize:13,overflowWrap:"anywhere"}}><small style={{display:"block",color:"#7a1bd8",fontWeight:700,marginBottom:4}}>NOVO</small>{displayValue(newValues[key])}</div></div>}</div>):<div className="auditEmpty">Não há campos detalhados neste registro.</div>})()}</div><div className="modalActions"><button className="secondary" onClick={()=>setSelectedAuditLog(null)}>Fechar</button></div></div></div>}
     {showNewMaterialOrder&&<div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setShowNewMaterialOrder(false)}}><div className="modal orderModal" style={{maxWidth:760}}>
       <style>{`
         .orderModal .orderItemsHeader{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:12px}
@@ -1788,9 +1328,44 @@ export default function Home() {
         <label>Unidade de medida<input value={materialForm.unit} onChange={e=>setMaterialForm({...materialForm,unit:e.target.value})} placeholder="un, pct, cx..."/></label>
         <label>Estoque mínimo<input type="number" min="0" step="0.01" value={materialForm.minimum_quantity} onChange={e=>setMaterialForm({...materialForm,minimum_quantity:e.target.value})}/></label></>}
         <label className="full">Descrição<textarea rows={3} value={materialForm.description} onChange={e=>setMaterialForm({...materialForm,description:e.target.value})} placeholder="Informações adicionais sobre o material..."/></label>
-        <label className="full">Imagem do material<input type="file" accept="image/jpeg,image/png,image/webp" onChange={e=>{const file=e.target.files?.[0]||null;if(file){if(!["image/jpeg","image/png","image/webp"].includes(file.type)){setStockError("Selecione uma imagem JPG, PNG ou WebP.");e.currentTarget.value="";return;}if(file.size>5*1024*1024){setStockError("A imagem deve ter no máximo 5 MB.");e.currentTarget.value="";return;}setMaterialImageFile(file);setMaterialImagePreview(URL.createObjectURL(file));setRemoveMaterialImage(false);}}}/><small>JPG, PNG ou WebP. Tamanho máximo: 5 MB.</small></label>
+        <div className="full materialImageField">
+          <span className="materialImageLabel">Imagem do material</span>
+          <label
+            htmlFor="material-image-input"
+            className={`materialImageDropzone ${isMaterialImageDragging?"isDragging":""}`}
+            onDragOver={e=>{e.preventDefault();setIsMaterialImageDragging(true);}}
+            onDragLeave={e=>{e.preventDefault();setIsMaterialImageDragging(false);}}
+            onDrop={e=>{e.preventDefault();setIsMaterialImageDragging(false);selectMaterialImage(e.dataTransfer.files?.[0]||null);}}
+          >
+            <span className="materialImageIcon"><ImagePlus size={25}/></span>
+            <span className="materialImageEmpty">
+              <strong>Arraste uma imagem até aqui</strong>
+              <small>ou clique para selecionar um arquivo</small>
+            </span>
+            <span className="materialImageSelect"><Upload size={15}/> Escolher imagem</span>
+            <small className="materialImageHint">JPG, PNG ou WebP · Máximo de 5 MB</small>
+          </label>
+          <input
+            id="material-image-input"
+            className="materialImageInput"
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            onChange={e=>{selectMaterialImage(e.target.files?.[0]||null);e.currentTarget.value="";}}
+          />
+        </div>
       </div>
-      {materialImagePreview&&<div style={{marginTop:14,display:"flex",alignItems:"center",gap:12}}><img src={materialImagePreview} alt="Pré-visualização da imagem do material" style={{width:92,height:92,objectFit:"cover",borderRadius:10,border:"1px solid #e7e8ef"}}/><button type="button" className="secondary" onClick={()=>{setMaterialImageFile(null);setMaterialImagePreview("");setRemoveMaterialImage(true);}}>Remover imagem</button></div>}
+      {materialImagePreview&&<div className="materialImagePreview">
+        <div className="materialImagePreviewInfo">
+          <img src={materialImagePreview} alt="Pré-visualização da imagem do material"/>
+          <div>
+            <strong>{materialImageFile?.name||"Imagem atual do material"}</strong>
+            <small>{materialImageFile?(materialImageFile.size/1024/1024).toFixed(2)+" MB":"Imagem já cadastrada"}</small>
+          </div>
+        </div>
+        <button type="button" className="secondary materialImageRemove" onClick={removeSelectedMaterialImage}>
+          <X size={15}/> Remover imagem
+        </button>
+      </div>}
       {editingMaterialId&&!materialImagePreview&&<div className="notice" style={{marginTop:12}}>Nenhuma imagem selecionada. Selecione um arquivo para adicionar uma imagem.</div>}
       {!editingMaterialId&&<div className="notice" style={{marginTop:14}}>Estoque inicial: <b>0 {materialForm.unit||"un"}</b>. Para adicionar quantidade, registre uma movimentação do tipo Entrada após cadastrar.</div>}
       <div className="modalActions"><button className="secondary" onClick={()=>setShowNewMaterial(false)}>Cancelar</button><button className="primary" onClick={createMaterial} disabled={stockSaving||!materialForm.name.trim()}>{stockSaving?"Salvando...":editingMaterialId?"Salvar alterações":"Cadastrar material"}</button></div>
@@ -1853,7 +1428,39 @@ export default function Home() {
         <div style={{maxHeight:"48vh",overflowY:"auto",width:"100%"}}><TaskTable tasks={pageItems("memberTasks",visibleMemberTasks)} onSelect={task=>{setSelectedMember(null);setSelected(task)}} unreadCounts={unreadCounts}/><Pagination {...paginationProps("memberTasks",visibleMemberTasks.length)}/></div>
       </div>
     </div></div>}
-    {selected&&<div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setSelected(null)}}><div className="modal requestDetailModal"><div className="modalHead"><div><p className="eyebrow">PROTOCOLO #{selected.protocol}</p><h2>{selected.title}</h2><p>{selected.area} · Aberta em {new Date(selected.created+"T12:00:00").toLocaleDateString("pt-BR")}</p></div><button className="iconButton" onClick={()=>setSelected(null)}><X/></button></div><div className="detailGrid"><div><small>Áreas responsáveis</small><b>{selected.areaAssignments.map(a=>a.area).join(" · ")||selected.area}</b></div><div><small>Prazo</small><b>{new Date(selected.due+"T12:00:00").toLocaleDateString("pt-BR")}</b></div><div><small>Prioridade</small><b>{selected.priority}</b></div><div><small>Status geral</small><StatusBadge status={selected.status}/></div></div><div style={{display:"grid",gap:12,marginTop:16}}><h3 style={{margin:"4px 0"}}>Acompanhamento por área</h3>{selected.areaAssignments.map(assignment=><div key={assignment.areaId} style={{border:"1px solid #e5e1eb",borderRadius:12,padding:14,display:"grid",gap:8}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap"}}><b>{assignment.area}</b><StatusBadge status={assignment.status}/></div><div style={{fontSize:13,color:"#667085"}}>Responsável: <b>{assignment.owner}</b>{assignment.isPrimary?" · Área principal":""}</div>{isManager&&<label>Reatribuir responsável<select value={assignment.ownerId} onChange={e=>void reassignAreaOwner(selected,assignment,e.target.value)}>{(detailMembersByArea[assignment.areaId]||[]).map(m=><option key={m.profile_id} value={m.profile_id}>{m.full_name}</option>)}</select></label>}{(isManager||(assignment.ownerId===profile?.id&&selected.requesterId!==profile?.id))?<label>Atualizar status desta área<select value={pendingAreaStatus?.task.id===selected.id&&pendingAreaStatus.assignment.areaId===assignment.areaId?pendingAreaStatus.nextStatus:assignment.status} onChange={e=>{const nextStatus=e.target.value as Status;if(nextStatus===assignment.status){setPendingAreaStatus(null);return;}setPendingAreaStatus({task:selected,assignment,nextStatus});}}>{(["Recebida","Em análise","Aguardando aprovação","Em execução","Concluída","Cancelada"] as Status[]).map(s=><option key={s}>{s}</option>)}</select></label>:null}</div>)}</div><p className="description">{selected.description||"Sem descrição adicional."}</p>
+    {selected&&<div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setSelected(null)}}><div className="modal requestDetailModal"><div className="modalHead"><div><p className="eyebrow">PROTOCOLO #{selected.protocol}</p><h2>{selected.title}</h2><p>{selected.area} · Aberta em {new Date(selected.created+"T12:00:00").toLocaleDateString("pt-BR")}</p></div><button className="iconButton" onClick={()=>setSelected(null)}><X/></button></div><div className="detailGrid"><div><small>Áreas responsáveis</small><b>{selected.areaAssignments.map(a=>a.area).join(" · ")||selected.area}</b></div><div><small>Prazo</small><b>{new Date(selected.due+"T12:00:00").toLocaleDateString("pt-BR")}</b></div><div><small>Prioridade</small><b>{selected.priority}</b></div><div><small>Status geral</small><StatusBadge status={selected.status}/></div></div><section className="requestDescription">
+  <div className="requestSectionHeading">
+    <span className="requestSectionIcon"> <ClipboardList size={17}/> </span>
+    <div><h3>Descrição da solicitação</h3><p>Detalhamento do que precisa ser realizado</p></div>
+  </div>
+  <p>{selected.description?.trim()||"Nenhuma descrição adicional foi informada."}</p>
+</section>
+<section className="requestAreaSection">
+  <div className="requestSectionHeading">
+    <span className="requestSectionIcon"><Users size={17}/></span>
+    <div><h3>Acompanhamento por área</h3><p>Responsáveis e andamento de cada área envolvida</p></div>
+    <span className="requestAreaCount">{selected.areaAssignments.length} {selected.areaAssignments.length===1?"área":"áreas"}</span>
+  </div>
+  <div className="requestAreaList">
+    {selected.areaAssignments.map(assignment=><article className="requestAreaCard" key={assignment.areaId}>
+      <div className="requestAreaCardHead">
+        <div className="requestAreaName">{assignment.area}{assignment.isPrimary&&<span className="requestPrimaryTag">Área principal</span>}</div>
+        <StatusBadge status={assignment.status}/>
+      </div>
+      <div className="requestAreaOwner"><span>Responsável</span><strong>{assignment.owner}</strong></div>
+      {isManager&&<label className="requestControlLabel">Reatribuir responsável
+        <select className="scheduleSelect" value={assignment.ownerId} onChange={e=>void reassignAreaOwner(selected,assignment,e.target.value)}>
+          {(detailMembersByArea[assignment.areaId]||[]).map(m=><option key={m.profile_id} value={m.profile_id}>{m.full_name}</option>)}
+        </select>
+      </label>}
+      {(isManager||(assignment.ownerId===profile?.id&&selected.requesterId!==profile?.id))?<label className="requestControlLabel">Atualizar status desta área
+        <select className="scheduleSelect" value={pendingAreaStatus?.task.id===selected.id&&pendingAreaStatus.assignment.areaId===assignment.areaId?pendingAreaStatus.nextStatus:assignment.status} onChange={e=>{const nextStatus=e.target.value as Status;if(nextStatus===assignment.status){setPendingAreaStatus(null);return;}setPendingAreaStatus({task:selected,assignment,nextStatus});}}>
+          {(["Recebida","Em análise","Aguardando aprovação","Em execução","Concluída","Cancelada"] as Status[]).map(s=><option key={s}>{s}</option>)}
+        </select>
+      </label>:null}
+    </article>)}
+  </div>
+</section>
       {pendingAreaStatus&&pendingAreaStatus.task.id===selected.id&&<div style={{padding:14,marginTop:14,border:"1px solid #d9c5f0",background:"#fbf8ff",borderRadius:10}}>
         <b style={{color:"#54218a"}}>{"Confirmar altera\u00e7\u00e3o do status?"}</b>
         <p style={{margin:"7px 0 12px",fontSize:13,color:"#5f5b6b"}}>{"Confira a mudan\u00e7a antes de salvar."}</p>
@@ -1909,11 +1516,273 @@ export default function Home() {
 
       {dataError&&<div className="errorBox" style={{marginTop:12}}>{dataError}</div>}
       </div></div>}
-  </main>;
+      </>
+    }
+  >
+<div className="content">
+        {dataError&&<div className="errorBanner"><span>{dataError}</span><button onClick={()=>session?.user&&loadData(session.user)}>Tentar novamente</button></div>}
+        {commentNotice&&<div className="notice" style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginBottom:16}}><span style={{display:"flex",alignItems:"center",gap:8}}><Bell size={16}/>{commentNotice}</span><button className="textButton" onClick={()=>setCommentNotice("")}>Fechar</button></div>}
+        <style>{`.dashFilterNote{margin:12px 0 0;padding:10px 12px;border-radius:9px;background:#fff9eb;color:#8a641c;font-size:11px;line-height:1.5}`}</style>
+        {active==="Dashboard" && <Dashboard
+          dashboardDateMode={dashboardDateMode}
+          setDashboardDateMode={setDashboardDateMode}
+          dashboardPeriod={dashboardPeriod}
+          setDashboardPeriod={setDashboardPeriod}
+          dashboardStart={dashboardStart}
+          setDashboardStart={setDashboardStart}
+          dashboardEnd={dashboardEnd}
+          setDashboardEnd={setDashboardEnd}
+          dashboardDateLabel={dashboardDateLabel}
+          dashboardTasks={dashboardTasks}
+          dashboardInProgress={dashboardInProgress}
+          dashboardDone={dashboardDone}
+          dashboardLate={dashboardLate}
+          areaNames={areaNames}
+          requestsByOwner={requestsByOwner}
+          dashboardOwnerItems={pageItems("dashboardOwners",requestsByOwner)}
+          dashboardOwnersPagination={paginationProps("dashboardOwners",requestsByOwner.length)}
+          unreadCounts={unreadCounts}
+          onNewRequest={()=>setShowNew(true)}
+          onNavigate={section=>setActive(section)}
+          onSelectTask={setSelected}
+        />}
+        {active==="Solicitações" && <Solicitacoes
+          search={search}
+          onSearchChange={setSearch}
+          requestUserFilter={requestUserFilter}
+          onRequestUserFilterChange={setRequestUserFilter}
+          requestStatusFilter={requestStatusFilter}
+          onRequestStatusFilterChange={setRequestStatusFilter}
+          requestUsers={requestUsers}
+          hasUnassigned={tasks.some(t=>t.areaAssignments.length>0&&t.areaAssignments.every(a=>!a.ownerId))}
+          filtered={filtered}
+          unreadCounts={unreadCounts}
+          onClearFilters={()=>{setSearch("");setRequestUserFilter("Todos");setRequestStatusFilter("Todos")}}
+          onNewRequest={()=>setShowNew(true)}
+          onSelectTask={setSelected}
+          pagination={paginationProps("requests",filtered.length)}
+        />}        {active==="Pedidos de Materiais" && <PedidosMateriais
+  ordersLoading={ordersLoading}
+  loadMaterialOrders={loadMaterialOrders}
+  ordersError={ordersError}
+  setOrdersError={setOrdersError}
+  myOrderAreas={myOrderAreas}
+  profile={profile}
+  setOrderAreaId={setOrderAreaId}
+  setShowNewMaterialOrder={setShowNewMaterialOrder}
+  applyOrdersPeriod={applyOrdersPeriod}
+  ordersPeriodPreset={ordersPeriodPreset}
+  ordersStartDate={ordersStartDate}
+  setOrdersStartDate={setOrdersStartDate}
+  ordersEndDate={ordersEndDate}
+  setOrdersEndDate={setOrdersEndDate}
+  ordersStatusFilter={ordersStatusFilter}
+  setOrdersStatusFilter={setOrdersStatusFilter}
+  ordersAreaFilter={ordersAreaFilter}
+  setOrdersAreaFilter={setOrdersAreaFilter}
+  orderStatusLabels={orderStatusLabels}
+  areas={areas}
+  ordersDateRangeInvalid={ordersDateRangeInvalid}
+  filteredMaterialOrders={filteredMaterialOrders}
+  materialOrders={materialOrders}
+  pendingManagerOrders={pendingManagerOrders}
+  pendingStockOrders={pendingStockOrders}
+  activeMaterialOrders={activeMaterialOrders}
+  materialOrderItems={materialOrderItems}
+  orderRequesterName={orderRequesterName}
+  orderAreaName={orderAreaName}
+  pageItems={pageItems}
+  paginationProps={paginationProps}
+  selectedOrder={selectedOrder}
+  selectedOrderItems={selectedOrderItems}
+  selectedOrderHistory={selectedOrderHistory}
+  setSelectedMaterialOrder={setSelectedMaterialOrder}
+  isManager={isManager}
+  canManageStock={canManageStock}
+  ordersSaving={ordersSaving}
+  runMaterialOrderAction={runMaterialOrderAction}
+/>}
+        {active==="Cronograma" && <Cronograma
+  scheduleOverdueCount={scheduleOverdueCount}
+  scheduleTodayCount={scheduleTodayCount}
+  scheduleNextSevenCount={scheduleNextSevenCount}
+  nonCancelledTaskCount={tasks.filter(t=>t.status!=="Cancelada").length}
+  scheduleTasks={scheduleTasks}
+  scheduleToday={scheduleToday}
+  schedulePeriod={schedulePeriod}
+  setSchedulePeriod={setSchedulePeriod}
+  scheduleOwnerFilter={scheduleOwnerFilter}
+  setScheduleOwnerFilter={setScheduleOwnerFilter}
+  scheduleAreaFilter={scheduleAreaFilter}
+  setScheduleAreaFilter={setScheduleAreaFilter}
+  scheduleStatusFilter={scheduleStatusFilter}
+  setScheduleStatusFilter={setScheduleStatusFilter}
+  scheduleStartDate={scheduleStartDate}
+  setScheduleStartDate={setScheduleStartDate}
+  scheduleEndDate={scheduleEndDate}
+  setScheduleEndDate={setScheduleEndDate}
+  requestUsers={requestUsers}
+  hasUnassignedTasks={tasks.some(t=>t.areaAssignments.length>0&&t.areaAssignments.every(a=>!a.ownerId))}
+  areas={areas}
+  pageItems={pageItems}
+  paginationProps={paginationProps}
+  onSelectTask={setSelected}
+/>}
+{active==="Colaboradores" && <Colaboradores
+  members={members}
+  areas={areas}
+  isAdmin={profile?.role==="admin"}
+  onRefresh={()=>session?.user&&loadData(session.user)}
+  onSelectMember={(m)=>{
+    setSelectedMember(m);
+    setMemberTaskStatus("Todas");
+    setMemberForm({full_name:m.full_name,role:m.role,area_ids:m.area_ids||[],active:m.active,stock_manager:m.stock_manager===true});
+    setMemberMessage("");
+    setMemberEditing(false);
+    setMemberConfirmOpen(false);
+  }}
+  pageItems={pageItems}
+  paginationProps={paginationProps}
+/>}
+        {active==="Estoque" && <Estoque
+  canManageStock={canManageStock}
+  stockSection={stockSection}
+  setStockSection={setStockSection}
+  loadStock={loadStock}
+  stockLoading={stockLoading}
+  stockError={stockError}
+  setStockError={setStockError}
+  openNewMaterial={openNewMaterial}
+  stockMaterials={stockMaterials}
+  setMovementError={setMovementError}
+  setMovementForm={setMovementForm}
+  setShowStockMovement={setShowStockMovement}
+  stockMovementSummary={stockMovementSummary}
+  reservedByMaterial={reservedByMaterial}
+  stockAlerts={stockAlerts}
+  pageItems={pageItems}
+  paginationProps={paginationProps}
+  exportStockConsumption={exportStockConsumption}
+  filteredConsumptionMovements={filteredConsumptionMovements}
+  stockConsumptionMaterial={stockConsumptionMaterial}
+  setStockConsumptionMaterial={setStockConsumptionMaterial}
+  stockConsumptionStart={stockConsumptionStart}
+  setStockConsumptionStart={setStockConsumptionStart}
+  stockConsumptionEnd={stockConsumptionEnd}
+  setStockConsumptionEnd={setStockConsumptionEnd}
+  stockConsumptionSummary={stockConsumptionSummary}
+  stockConsumptionByMonth={stockConsumptionByMonth}
+  stockConsumptionByMaterial={stockConsumptionByMaterial}
+  filteredMaterials={filteredMaterials}
+  stockSearch={stockSearch}
+  setStockSearch={setStockSearch}
+  materialImageUrls={materialImageUrls}
+  openEditMaterial={openEditMaterial}
+  tasks={tasks}
+  stockReportMaterial={stockReportMaterial}
+  setStockReportMaterial={setStockReportMaterial}
+  stockReportType={stockReportType}
+  setStockReportType={setStockReportType}
+  stockReportStart={stockReportStart}
+  setStockReportStart={setStockReportStart}
+  stockReportEnd={stockReportEnd}
+  setStockReportEnd={setStockReportEnd}
+  filteredStockMovements={filteredStockMovements}
+  stockReportSummary={stockReportSummary}
+  exportStockMovements={exportStockMovements}
+/>}
+        {active==="Relatórios" && <Relatorios
+  exportReports={exportReports}
+  reportDateMode={reportDateMode}
+  setReportDateMode={setReportDateMode}
+  reportAreaFilter={reportAreaFilter}
+  setReportAreaFilter={setReportAreaFilter}
+  reportOwnerFilter={reportOwnerFilter}
+  setReportOwnerFilter={setReportOwnerFilter}
+  reportStatusFilter={reportStatusFilter}
+  setReportStatusFilter={setReportStatusFilter}
+  reportPeriod={reportPeriod}
+  setReportPeriod={setReportPeriod}
+  reportStartDate={reportStartDate}
+  setReportStartDate={setReportStartDate}
+  reportEndDate={reportEndDate}
+  setReportEndDate={setReportEndDate}
+  areas={areas}
+  requestUsers={requestUsers}
+  tasks={tasks}
+  reportDateLabel={reportDateLabel}
+  reportTasks={reportTasks}
+  reportReceived={reportReceived}
+  reportAnalysis={reportAnalysis}
+  reportAwaitingApproval={reportAwaitingApproval}
+  reportExecuting={reportExecuting}
+  reportDone={reportDone}
+  reportCancelled={reportCancelled}
+  reportLate={reportLate}
+  reportOpenBase={reportOpenBase}
+  reportCompletionBase={reportCompletionBase}
+  reportCompletionRate={reportCompletionRate}
+  reportOverdueRate={reportOverdueRate}
+  reportByArea={reportByArea}
+  reportByOwner={reportByOwner}
+  pageItems={pageItems}
+  paginationProps={paginationProps}
+  onSelectTask={task=>setSelected(task)}
+  unreadCounts={unreadCounts}
+/>}
+        {active==="Configurações" && <Configuracoes areaNames={areaNames} userEmail={profile?.email ?? null} userRole={profile?.role ?? null}/>}
+        {active==="Auditoria" && profile?.role==="admin" && <>
+          <div className="pageHeading"><div><p className="eyebrow">CONTROLE E RASTREABILIDADE</p><h1>Auditoria</h1><p className="sub">Consulte as ações realizadas nos módulos operacionais e administrativos.</p></div><button className="secondary" type="button" onClick={()=>void loadAuditLogs()} disabled={auditLoading}><RefreshCw size={15}/> {auditLoading?"Atualizando...":"Atualizar histórico"}</button></div>
+          <style>{`
+            .auditFilterCard{padding:22px 24px;margin-bottom:18px;border:1px solid #e7e8ef;background:linear-gradient(135deg,#fff 0%,#fcfbff 100%);box-shadow:0 5px 18px rgba(31,24,55,.035)}
+            .auditFilterTop{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:18px}
+            .auditFilterTitle{display:flex;align-items:center;gap:11px}
+            .auditFilterIcon{width:38px;height:38px;display:grid;place-items:center;border-radius:12px;background:#f2eaff;color:#7a1bd8;flex:none}
+            .auditFilterTitle h3{margin:0 0 4px;font-size:15px;font-weight:700;color:#20202b}
+            .auditFilterTitle p{margin:0;font-size:12px;color:#858397}
+            .auditFilterGrid{display:grid;grid-template-columns:minmax(220px,1.5fr) repeat(3,minmax(145px,1fr));gap:12px;align-items:end}
+            .auditField{display:grid;gap:7px;min-width:0;color:#565568;font-size:11px;font-weight:700}
+            .auditControl{width:100%;height:42px;box-sizing:border-box;border:1px solid #e1e2ea;border-radius:10px;background:#fff;padding:0 11px;color:#292837;font:500 13px inherit;outline:none}
+            .auditControl:focus{border-color:#9b5cdb;box-shadow:0 0 0 3px rgba(122,27,216,.10)}
+            .auditDateGrid{display:grid;grid-template-columns:repeat(2,minmax(150px,1fr));gap:12px;margin-top:14px}
+            .auditFilterBottom{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:16px;padding-top:13px;border-top:1px solid #f0edf4;color:#777487;font-size:12px}
+            .auditTableWrap{overflow:auto;width:100%}.auditTable{width:100%;border-collapse:collapse;min-width:900px}
+            .auditTable th{padding:12px 13px;text-align:left;background:#faf9fc;color:#777487;font-size:10px;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap}
+            .auditTable td{padding:13px;border-top:1px solid #f0edf4;color:#454253;font-size:12px;vertical-align:top}
+            .auditActor{display:grid;gap:3px;min-width:145px}.auditActor b{color:#292536;font-size:12px}.auditActor small{color:#858397;font-size:10px}
+            .auditAction{display:inline-flex;padding:5px 8px;border-radius:7px;background:#f2eaff;color:#7020c5;font-size:10px;font-weight:800}.auditAction.delete{background:#fff0f0;color:#b42318}.auditAction.insert{background:#ecfdf3;color:#027a48}
+            .auditDetails{min-width:250px}.auditDetails summary{color:#7020c5;font-weight:700;cursor:pointer;list-style:none}.auditDetails summary::-webkit-details-marker{display:none}
+            .auditDiff{display:grid;gap:7px;margin-top:10px;max-width:430px}.auditDiffRow{padding:8px 9px;border:1px solid #eee8f5;border-radius:8px;background:#fcfbfe;overflow-wrap:anywhere}.auditDiffRow b{display:block;margin-bottom:4px;color:#5b5368;font-size:10px}.auditDiffRow span{display:block;color:#454253;font-size:11px;line-height:1.45}
+            .auditEmpty{padding:32px 18px;text-align:center;color:#858397;font-size:13px}
+            @media(max-width:900px){.auditFilterGrid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:560px){.auditFilterCard{padding:17px}.auditFilterGrid,.auditDateGrid{grid-template-columns:1fr}.auditFilterTop{flex-direction:column}}
+          `}</style>
+          <section className="panel auditFilterCard">
+            <div className="auditFilterTop"><div className="auditFilterTitle"><span className="auditFilterIcon"><FileSearch size={19}/></span><div><h3>Filtros do histórico</h3><p>Refine os registros por período, colaborador, módulo ou operação.</p></div></div><button type="button" className="secondary" style={{padding:"8px 12px",fontSize:12}} onClick={()=>{setAuditSearch("");setAuditActorFilter("Todos");setAuditModuleFilter("Todos");setAuditActionFilter("Todos");setAuditStartDate("");setAuditEndDate("")}}>Limpar filtros</button></div>
+            <div className="auditFilterGrid">
+              <label className="auditField">Buscar registro<input className="auditControl" value={auditSearch} onChange={e=>setAuditSearch(e.target.value)} placeholder="Nome, e-mail ou identificador..."/></label>
+              <label className="auditField">Colaborador<select className="auditControl" value={auditActorFilter} onChange={e=>setAuditActorFilter(e.target.value)}><option value="Todos">Todos</option>{auditActors.map(actor=><option key={actor} value={actor}>{actor}</option>)}</select></label>
+              <label className="auditField">Módulo<select className="auditControl" value={auditModuleFilter} onChange={e=>setAuditModuleFilter(e.target.value)}><option value="Todos">Todos</option>{auditModules.map(module=><option key={module} value={module}>{module.replaceAll("_"," ")}</option>)}</select></label>
+              <label className="auditField">Tipo de ação<select className="auditControl" value={auditActionFilter} onChange={e=>setAuditActionFilter(e.target.value)}><option value="Todos">Todas</option><option value="INSERT">Inclusão</option><option value="UPDATE">Alteração</option><option value="DELETE">Exclusão</option></select></label>
+            </div>
+            <div className="auditDateGrid"><label className="auditField">Data inicial<input className="auditControl" type="date" value={auditStartDate} onChange={e=>setAuditStartDate(e.target.value)}/></label><label className="auditField">Data final<input className="auditControl" type="date" min={auditStartDate||undefined} value={auditEndDate} onChange={e=>setAuditEndDate(e.target.value)}/></label></div>
+            <div className="auditFilterBottom"><span><b>{filteredAuditLogs.length}</b> registro(s) exibido(s)</span><span>Consulta dos 500 registros mais recentes</span></div>
+          </section>
+          {auditError&&<div className="errorBanner" style={{marginBottom:16}}>{auditError}</div>}
+          <section className="panel">
+            <div className="panelHead"><div><h3>Histórico de operações</h3><p>Valores anteriores e novos ficam disponíveis em cada registro.</p></div><span className="muted">{auditLogs.length} carregados</span></div>
+            {auditLoading&&!auditLogs.length?<div className="auditEmpty">Carregando histórico de auditoria...</div>:!filteredAuditLogs.length?<div className="auditEmpty">Nenhum registro encontrado com os filtros selecionados.</div>:<div className="auditTableWrap"><table className="auditTable"><thead><tr><th>Data e hora</th><th>Colaborador</th><th>Ação</th><th>Módulo</th><th>Registro</th><th>Detalhes</th></tr></thead><tbody>
+              {pageItems("audit",filteredAuditLogs).map(log=>{
+                const oldValues=log.old_values||{};const newValues=log.new_values||{};
+                const keys=[...new Set([...Object.keys(oldValues),...Object.keys(newValues)])].filter(key=>!["created_at","updated_at"].includes(key));
+                const displayValue=(value:any)=>value===null||value===undefined?"—":typeof value==="object"?JSON.stringify(value):String(value);
+                const changes=keys.filter(key=>JSON.stringify(oldValues[key])!==JSON.stringify(newValues[key]));
+                return <tr key={log.id}><td style={{whiteSpace:"nowrap"}}>{new Date(log.created_at).toLocaleString("pt-BR")}</td><td><div className="auditActor"><b>{log.actor_name||"Sistema"}</b><small>{log.actor_email||"Ação automática"}</small></div></td><td><span className={`auditAction ${log.action.toLowerCase()}`}>{log.action==="INSERT"?"Inclusão":log.action==="UPDATE"?"Alteração":"Exclusão"}</span></td><td style={{whiteSpace:"nowrap",textTransform:"capitalize"}}>{log.table_name.replaceAll("_"," ")}</td><td style={{fontFamily:"monospace",fontSize:10}}>{log.record_id||"—"}</td><td><button type="button" onClick={()=>setSelectedAuditLog(log)} style={{border:0,background:"transparent",padding:0,color:"#7a1bd8",fontWeight:700,fontSize:12,cursor:"pointer",whiteSpace:"nowrap"}}>Ver {changes.length||keys.length} campo(s)</button></td></tr>;
+              })}
+            </tbody></table></div>}<Pagination {...paginationProps("audit",filteredAuditLogs.length)}/>
+          </section>
+        </>}
+      </div>
+  </MainLayout>;
 }
-function Pagination({page,pageSize,total,totalPages,onPageChange,onPageSizeChange}:{page:number;pageSize:number;total:number;totalPages:number;onPageChange:(page:number)=>void;onPageSizeChange:(size:number)=>void}) { if(total<=10&&pageSize===10)return null; const start=total?((page-1)*pageSize)+1:0; const end=Math.min(page*pageSize,total); const pages=Array.from({length:totalPages},(_,i)=>i+1); const visible=pages.length<=5?pages:[...new Set([1,...pages.filter(p=>Math.abs(p-page)<=1),totalPages])].sort((a,b)=>a-b); return <div className="listPagination"><span className="paginationSummary">Exibindo <b>{start}–{end}</b> de <b>{total}</b> registros</span><div className="paginationControls"><label className="paginationSize">Por página<select value={pageSize} onChange={e=>onPageSizeChange(Number(e.target.value))}><option value={10}>10</option><option value={20}>20</option><option value={50}>50</option></select></label><button type="button" className="paginationButton" disabled={page<=1} onClick={()=>onPageChange(page-1)}>Anterior</button>{visible.map((p,index)=><span key={p} style={{display:"contents"}}>{index>0&&p-visible[index-1]>1&&<span className="paginationDots">…</span>}<button type="button" className={`paginationButton paginationNumber ${page===p?"active":""}`} aria-current={page===p?"page":undefined} onClick={()=>onPageChange(p)}>{p}</button></span>)}<button type="button" className="paginationButton" disabled={page>=totalPages} onClick={()=>onPageChange(page+1)}>Próxima</button></div></div>; }
-function Stat({icon,label,value,tone}:{icon:React.ReactNode,label:string,value:number,tone:string}) { return <div className="statCard"><div className={`statIcon ${tone}`}>{icon}</div><div><small>{label}</small><strong>{value}</strong></div></div>; }
-function StatusBadge({status}:{status:Status}) { return <span className={`status ${statusClass[status]}`}>{status}</span>; }
-function TaskTable({tasks,onSelect,unreadCounts={}}:{tasks:Task[],onSelect:(t:Task)=>void,unreadCounts?:Record<string,number>}) { if(!tasks.length)return <div className="emptyTable">Nenhuma solicitação cadastrada no Supabase.</div>; return <div className="tableWrap"><table><thead><tr><th>Solicitação</th><th>Áreas</th><th>Responsáveis</th><th>Prioridade</th><th>Prazo</th><th>Status geral</th></tr></thead><tbody>{tasks.map(t=><tr key={t.id} onClick={()=>onSelect(t)}><td><b>#{t.protocol}</b><span>{t.title}</span>{(unreadCounts[t.id]||0)>0&&<span style={{display:"inline-flex",alignItems:"center",gap:5,marginTop:5,padding:"4px 8px",borderRadius:20,background:"#f2e8ff",color:"#7020c5",fontSize:10,fontWeight:700}}><MessageCircle size={11}/>{unreadCounts[t.id]} não lida(s)</span>}</td><td>{t.areaAssignments.map(a=>a.area).join(" · ")||t.area}</td><td>{t.areaAssignments.map(a=>a.owner).join(" · ")||t.owner}</td><td><span className={`priority ${t.priority.toLowerCase()}`}>{t.priority}</span></td><td>{new Date(t.due+"T12:00:00").toLocaleDateString("pt-BR")}</td><td><StatusBadge status={t.status}/></td></tr>)}</tbody></table></div>; }
 
 
