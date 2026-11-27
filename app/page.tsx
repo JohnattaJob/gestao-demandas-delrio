@@ -1603,31 +1603,26 @@ export default function Home() {
                   <strong>{assignment.area}</strong>
                   {assignment.isPrimary&&<span className="requestPrimaryTag">Área principal</span>}
                 </div>
-                <StatusBadge status={assignment.status}/>
+                {detailEditing&&canEditAreaStatus ?
+                  <select className="scheduleSelect requestAreaStatusSelect" aria-label={`Status da área ${assignment.area}`} value={draftAssignment.status} onChange={e=>setDetailDraft(current=>current?{...current,areaAssignments:current.areaAssignments.map(item=>item.areaId===assignment.areaId?{...item,status:e.target.value as Status}:item)}:current)}>
+                    {(["Recebida","Em análise","Aguardando aprovação","Em execução","Concluída","Cancelada"] as Status[]).map(s=><option key={s}>{s}</option>)}
+                  </select> :
+                  <StatusBadge status={assignment.status}/>}
               </div>
               <div className="requestAreaDetails">
-                <div className="requestAreaDetailRow">
-                  <span>Responsável</span>
-                  <strong>{draftAssignment.owner||"Não atribuído"}</strong>
-                </div>
-                <div className="requestAreaDetailRow">
-                  <span>Responsável atribuído</span>
-                  {detailEditing&&isManager ?
-                    <select className="scheduleSelect" value={draftAssignment.ownerId||""} onChange={e=>{
-                      const selectedMember=(detailMembersByArea[assignment.areaId]||[]).find(member=>member.profile_id===e.target.value);
-                      setDetailDraft(current=>current?{...current,areaAssignments:current.areaAssignments.map(item=>item.areaId===assignment.areaId?{...item,ownerId:e.target.value,owner:selectedMember?.full_name||"Não atribuído"}:item)}:current);
-                    }}>
-                      {(detailMembersByArea[assignment.areaId]||[]).map(member=><option key={member.profile_id} value={member.profile_id}>{member.full_name}</option>)}
-                    </select> :
-                    <strong className="requestAssignedPerson">{draftAssignment.owner||"Não atribuído"}</strong>}
-                </div>
-                <div className="requestAreaDetailRow">
-                  <span>Status desta área</span>
-                  {detailEditing&&canEditAreaStatus ?
-                    <select className="scheduleSelect" value={draftAssignment.status} onChange={e=>setDetailDraft(current=>current?{...current,areaAssignments:current.areaAssignments.map(item=>item.areaId===assignment.areaId?{...item,status:e.target.value as Status}:item)}:current)}>
-                      {(["Recebida","Em análise","Aguardando aprovação","Em execução","Concluída","Cancelada"] as Status[]).map(s=><option key={s}>{s}</option>)}
-                    </select> :
-                    <StatusBadge status={assignment.status}/>}
+                <div className="requestAreaResponsible">
+                  <span className="requestAreaResponsibleIcon"><Users size={15}/></span>
+                  <div className="requestAreaResponsibleInfo">
+                    <span>Responsável</span>
+                    {detailEditing&&isManager ?
+                      <select className="scheduleSelect" aria-label={`Responsável da área ${assignment.area}`} value={draftAssignment.ownerId||""} onChange={e=>{
+                        const selectedMember=(detailMembersByArea[assignment.areaId]||[]).find(member=>member.profile_id===e.target.value);
+                        setDetailDraft(current=>current?{...current,areaAssignments:current.areaAssignments.map(item=>item.areaId===assignment.areaId?{...item,ownerId:e.target.value,owner:selectedMember?.full_name||"Não atribuído"}:item)}:current);
+                      }}>
+                        {(detailMembersByArea[assignment.areaId]||[]).map(member=><option key={member.profile_id} value={member.profile_id}>{member.full_name}</option>)}
+                      </select> :
+                      <strong>{draftAssignment.owner||"Não atribuído"}</strong>}
+                  </div>
                 </div>
               </div>
             </article>;
