@@ -1587,3 +1587,9 @@ td:first-child b {
     width: 100%;
   }
 }
+
+/* Acompanhamento por área — mesmo destaque visual da descrição */
+.requestDetailModal .requestAreaSection {
+  background: #fcfaff;
+  border-left: 3px solid #9b5cdb;
+}
