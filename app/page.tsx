@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import type { Session, User } from "@supabase/supabase-js";
@@ -28,6 +28,7 @@ type Area = { id: string; name: string };
 type Profile = { id: string; full_name: string; email: string | null; role: "admin" | "gestor" | "colaborador"; area_id: string | null; area_ids?: string[]; active: boolean; stock_manager: boolean };
 type AreaMember = { profile_id: string; full_name: string };
 type RequestComment = { id: string; request_id: string; author_id: string; body: string; created_at: string; author_name: string };
+type RequestDetailDraft = Pick<Task, "title" | "due" | "description" | "priority"> & { areaAssignments: AreaAssignment[] };
 type Material = {
   id: string;
   sku: string | null;
@@ -113,6 +114,9 @@ export default function Home() {
   const [showNew,setShowNew] = useState(false);
   const [mobileMenu,setMobileMenu] = useState(false);
   const [selected,setSelected] = useState<Task|null>(null);
+  const [detailEditing,setDetailEditing] = useState(false);
+  const [detailDraft,setDetailDraft] = useState<RequestDetailDraft|null>(null);
+  const [detailSaving,setDetailSaving] = useState(false);
   const [requestComments,setRequestComments] = useState<RequestComment[]>([]);
   const [commentsLoading,setCommentsLoading] = useState(false);
   const [commentsSending,setCommentsSending] = useState(false);
@@ -133,8 +137,7 @@ export default function Home() {
   const [deleteConfirm,setDeleteConfirm] = useState(false);
   const [deletingTask,setDeletingTask] = useState(false);
   const [completeConfirm,setCompleteConfirm] = useState(false);
-  const [pendingTaskUpdate,setPendingTaskUpdate] = useState<{task:Task;patch:Partial<Task>}|null>(null);
-  const [pendingAreaStatus,setPendingAreaStatus] = useState<{task:Task;assignment:AreaAssignment;nextStatus:Status}|null>(null);
+
   const [memberForm,setMemberForm] = useState({full_name:"",role:"colaborador" as Profile["role"],area_ids:[] as string[],active:true,stock_manager:false});
   const [saving,setSaving] = useState(false);
   const [form,setForm] = useState({title:"",priority:"Média" as Priority,due:"",description:""});
@@ -401,7 +404,11 @@ export default function Home() {
   },[profile?.id,tasks,refreshUnreadCounts]);
 
   useEffect(() => {
-    if (!selected) { setPendingTaskUpdate(null); setPendingAreaStatus(null); }
+    if (!selected) {
+      setDetailEditing(false);
+      setDetailDraft(null);
+      setDeleteConfirm(false);
+    }
   },[selected]);
 
   useEffect(() => {
@@ -1219,27 +1226,117 @@ export default function Home() {
     setDeletingTask(false);
   }
 
-  async function updateTask(task:Task, patch:Partial<Task>) {
-    if (!supabase || !profile) return;
-    if ((patch.priority !== undefined || patch.ownerId !== undefined) && !isManager) { setDataError("Somente gestores e administradores podem alterar a prioridade ou o responsável."); return; }
-    const update:any={}; if(patch.priority&&isManager)update.priority=priorityToDb[patch.priority];
-    if(Object.keys(update).length){const {error}=await supabase.from("requests").update(update).eq("id",task.id);if(error){setDataError(error.message);return;}}
-    setPendingTaskUpdate(null);setSelected(null);if(session?.user)await loadData(session.user);
+  function beginRequestEditing(task:Task) {
+    setDataError("");
+    setDetailDraft({
+      title:task.title,
+      due:task.due,
+      description:task.description,
+      priority:task.priority,
+      areaAssignments:task.areaAssignments.map(assignment=>({...assignment}))
+    });
+    setDetailEditing(true);
   }
 
-  async function reassignAreaOwner(task:Task, assignment:AreaAssignment, ownerId:string) {
-    if(!supabase||!isManager||!ownerId)return;
-    const {error}=await supabase.rpc("assign_request_area",{p_request_id:task.id,p_area_id:assignment.areaId,p_owner_id:ownerId,p_is_primary:assignment.isPrimary});
-    if(error){setDataError(error.message);return;} setDataError(""); if(session?.user)await loadData(session.user);
+  function cancelRequestEditing() {
+    if (detailSaving) return;
+    setDetailDraft(null);
+    setDetailEditing(false);
+    setDataError("");
   }
 
-  async function updateAreaStatus(task:Task, assignment:AreaAssignment, nextStatus:Status) {
-    if(!supabase||!profile)return;
-    if(!isManager&&(assignment.ownerId!==profile.id||task.requesterId===profile.id)){setDataError("Somente o responsável da área pode atualizar seu status. O solicitante não pode alterar o status da própria solicitação.");return;}
-    const {error}=await supabase.from("request_areas").update({status:statusToDb[nextStatus]}).eq("request_id",task.id).eq("area_id",assignment.areaId);
-    if(error){setDataError(error.message);return;}setPendingAreaStatus(null);setDataError("");if(session?.user)await loadData(session.user);
-  }
+  async function saveRequestDetails(task:Task) {
+    if (!supabase || !profile || !detailDraft || detailSaving) return;
 
+    const canEditBase = isManager || task.requesterId === profile.id;
+    const requestChanges:Record<string,unknown> = {};
+
+    if (canEditBase) {
+      if (!detailDraft.title.trim()) {
+        setDataError("Informe um título para a solicitação.");
+        return;
+      }
+      if (!detailDraft.due) {
+        setDataError("Informe o prazo da solicitação.");
+        return;
+      }
+      if (detailDraft.title.trim() !== task.title) requestChanges.title = detailDraft.title.trim();
+      if (detailDraft.due !== task.due) requestChanges.due_date = detailDraft.due;
+      if (detailDraft.description !== task.description) requestChanges.description = detailDraft.description.trim() || null;
+    }
+
+    if (detailDraft.priority !== task.priority) {
+      if (!isManager) {
+        setDataError("Somente gestores e administradores podem alterar a prioridade.");
+        return;
+      }
+      requestChanges.priority = priorityToDb[detailDraft.priority];
+    }
+
+    const assignmentChanges = detailDraft.areaAssignments.filter(draftAssignment => {
+      const original = task.areaAssignments.find(item=>item.areaId===draftAssignment.areaId);
+      return original && (original.ownerId !== draftAssignment.ownerId || original.status !== draftAssignment.status);
+    });
+
+    for (const draftAssignment of assignmentChanges) {
+      const original = task.areaAssignments.find(item=>item.areaId===draftAssignment.areaId);
+      if (!original) continue;
+
+      if (original.ownerId !== draftAssignment.ownerId && !isManager) {
+        setDataError("Somente gestores e administradores podem reatribuir responsáveis.");
+        return;
+      }
+
+      if (original.status !== draftAssignment.status &&
+          !isManager &&
+          (original.ownerId !== profile.id || task.requesterId === profile.id)) {
+        setDataError("Somente o responsável da área pode atualizar seu status. O solicitante não pode alterar o status da própria solicitação.");
+        return;
+      }
+    }
+
+    setDetailSaving(true);
+    setDataError("");
+
+    try {
+      if (Object.keys(requestChanges).length) {
+        const {error} = await supabase.from("requests").update(requestChanges).eq("id",task.id);
+        if (error) throw error;
+      }
+
+      for (const draftAssignment of assignmentChanges) {
+        const original = task.areaAssignments.find(item=>item.areaId===draftAssignment.areaId);
+        if (!original) continue;
+
+        if (original.ownerId !== draftAssignment.ownerId) {
+          const {error} = await supabase.rpc("assign_request_area",{
+            p_request_id:task.id,
+            p_area_id:draftAssignment.areaId,
+            p_owner_id:draftAssignment.ownerId,
+            p_is_primary:original.isPrimary
+          });
+          if (error) throw error;
+        }
+
+        if (original.status !== draftAssignment.status) {
+          const {error} = await supabase.from("request_areas")
+            .update({status:statusToDb[draftAssignment.status]})
+            .eq("request_id",task.id)
+            .eq("area_id",draftAssignment.areaId);
+          if (error) throw error;
+        }
+      }
+
+      if (session?.user) await loadData(session.user);
+      setDetailDraft(null);
+      setDetailEditing(false);
+      setDataError("");
+    } catch (error:any) {
+      setDataError("Não foi possível concluir todas as alterações. " + (error?.message || "Verifique os dados e tente novamente."));
+    } finally {
+      setDetailSaving(false);
+    }
+  }
   if (authLoading) return <div className="authScreen"><div className="authCard"><img src="/logo-delrio.svg" alt="DelRio" className="brandLogo authBrandLogo" /><h1>Gestão de Demandas DelRio</h1><p>Verificando sua sessão...</p></div></div>;
   if(passwordRecoveryMode) return <div className="authScreen"><form className="authCard" onSubmit={updatePassword}><div className="authBrand"><img src="/logo-delrio.svg" alt="DelRio" className="brandLogo authBrandLogo" /><div><small>GESTÃO DE DEMANDAS</small></div></div><p className="eyebrow">RECUPERAÇÃO DE ACESSO</p><h1>Defina sua nova senha</h1><p className="authSub">Escolha uma senha com pelo menos 8 caracteres.</p><label>Nova senha<input type="password" autoComplete="new-password" value={newPassword} onChange={e=>setNewPassword(e.target.value)} placeholder="Digite a nova senha" minLength={8} required/></label><label>Confirmar nova senha<input type="password" autoComplete="new-password" value={confirmNewPassword} onChange={e=>setConfirmNewPassword(e.target.value)} placeholder="Digite novamente a nova senha" minLength={8} required/></label>{recoveryError&&<div className="errorBox">{recoveryError}</div>}<button className="primary authSubmit" disabled={recoveryLoading}>{recoveryLoading?"Salvando...":"Redefinir senha"}</button></form></div>;
   if (!session) return <div className="authScreen"><form className="authCard" onSubmit={forgotPasswordMode?requestPasswordReset:signIn}><div className="authBrand"><img src="/logo-delrio.svg" alt="DelRio" className="brandLogo authBrandLogo" /><div><small>GESTÃO DE DEMANDAS</small></div></div><p className="eyebrow">AMBIENTE DE MARKETING</p><h1>{forgotPasswordMode?"Recuperar senha":"Acesse sua conta"}</h1><p className="authSub">{forgotPasswordMode?"Informe seu e-mail cadastrado para receber o link de redefinição.":"Entre com seu e-mail e senha cadastrados no sistema."}</p><label>E-mail<input type="email" autoComplete="username" value={email} onChange={e=>{setEmail(e.target.value);setRecoveryEmailSent(false);setRecoveryError("");}} placeholder="seuemail@delrio.com.br" required/></label>{!forgotPasswordMode&&<label>Senha<input type="password" autoComplete="current-password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Digite sua senha" required/></label>}{loginError&&!forgotPasswordMode&&<div className="errorBox">{loginError}</div>}{recoveryError&&<div className="errorBox">{recoveryError}</div>}{recoveryEmailSent&&<div className="successBox">Se o endereço estiver cadastrado, você receberá um e-mail com as instruções para redefinir sua senha.</div>}{!forgotPasswordMode?<button type="button" className="textButton" onClick={()=>{setForgotPasswordMode(true);setLoginError("");setRecoveryError("");}}>Esqueci minha senha</button>:<button className="primary authSubmit" disabled={recoveryLoading}>{recoveryLoading?"Enviando...":"Enviar link de recuperação"}</button>}{forgotPasswordMode&&<button type="button" className="textButton" onClick={()=>{setForgotPasswordMode(false);setRecoveryEmailSent(false);setRecoveryError("");}}>Voltar para o login</button>}{!forgotPasswordMode&&<button className="primary authSubmit" disabled={loginLoading}>{loginLoading?"Entrando...":"Entrar"}</button>}<small className="authFoot">Acesso restrito à equipe autorizada.</small></form></div>;
@@ -1428,99 +1525,180 @@ export default function Home() {
         <div style={{maxHeight:"48vh",overflowY:"auto",width:"100%"}}><TaskTable tasks={pageItems("memberTasks",visibleMemberTasks)} onSelect={task=>{setSelectedMember(null);setSelected(task)}} unreadCounts={unreadCounts}/><Pagination {...paginationProps("memberTasks",visibleMemberTasks.length)}/></div>
       </div>
     </div></div>}
-    {selected&&<div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setSelected(null)}}><div className="modal requestDetailModal"><div className="modalHead"><div><p className="eyebrow">PROTOCOLO #{selected.protocol}</p><h2>{selected.title}</h2><p>{selected.area} · Aberta em {new Date(selected.created+"T12:00:00").toLocaleDateString("pt-BR")}</p></div><button className="iconButton" onClick={()=>setSelected(null)}><X/></button></div><div className="detailGrid"><div><small>Áreas responsáveis</small><b>{selected.areaAssignments.map(a=>a.area).join(" · ")||selected.area}</b></div><div><small>Prazo</small><b>{new Date(selected.due+"T12:00:00").toLocaleDateString("pt-BR")}</b></div><div><small>Prioridade</small><b>{selected.priority}</b></div><div><small>Status geral</small><StatusBadge status={selected.status}/></div></div><section className="requestDescription">
-  <div className="requestSectionHeading">
-    <span className="requestSectionIcon"> <ClipboardList size={17}/> </span>
-    <div><h3>Descrição da solicitação</h3><p>Detalhamento do que precisa ser realizado</p></div>
-  </div>
-  <p>{selected.description?.trim()||"Nenhuma descrição adicional foi informada."}</p>
-</section>
-<section className="requestAreaSection">
-  <div className="requestSectionHeading">
-    <span className="requestSectionIcon"><Users size={17}/></span>
-    <div><h3>Acompanhamento por área</h3><p>Responsáveis e andamento de cada área envolvida</p></div>
-    <span className="requestAreaCount">{selected.areaAssignments.length} {selected.areaAssignments.length===1?"área":"áreas"}</span>
-  </div>
-  <div className="requestAreaList">
-    {selected.areaAssignments.map(assignment=><article className="requestAreaCard" key={assignment.areaId}>
-      <div className="requestAreaCardHead">
-        <div className="requestAreaName">{assignment.area}{assignment.isPrimary&&<span className="requestPrimaryTag">Área principal</span>}</div>
-        <StatusBadge status={assignment.status}/>
-      </div>
-      <div className="requestAreaOwner"><span>Responsável</span><strong>{assignment.owner}</strong></div>
-      {isManager&&<label className="requestControlLabel">Reatribuir responsável
-        <select className="scheduleSelect" value={assignment.ownerId} onChange={e=>void reassignAreaOwner(selected,assignment,e.target.value)}>
-          {(detailMembersByArea[assignment.areaId]||[]).map(m=><option key={m.profile_id} value={m.profile_id}>{m.full_name}</option>)}
-        </select>
-      </label>}
-      {(isManager||(assignment.ownerId===profile?.id&&selected.requesterId!==profile?.id))?<label className="requestControlLabel">Atualizar status desta área
-        <select className="scheduleSelect" value={pendingAreaStatus?.task.id===selected.id&&pendingAreaStatus.assignment.areaId===assignment.areaId?pendingAreaStatus.nextStatus:assignment.status} onChange={e=>{const nextStatus=e.target.value as Status;if(nextStatus===assignment.status){setPendingAreaStatus(null);return;}setPendingAreaStatus({task:selected,assignment,nextStatus});}}>
-          {(["Recebida","Em análise","Aguardando aprovação","Em execução","Concluída","Cancelada"] as Status[]).map(s=><option key={s}>{s}</option>)}
-        </select>
-      </label>:null}
-    </article>)}
-  </div>
-</section>
-      {pendingAreaStatus&&pendingAreaStatus.task.id===selected.id&&<div style={{padding:14,marginTop:14,border:"1px solid #d9c5f0",background:"#fbf8ff",borderRadius:10}}>
-        <b style={{color:"#54218a"}}>{"Confirmar altera\u00e7\u00e3o do status?"}</b>
-        <p style={{margin:"7px 0 12px",fontSize:13,color:"#5f5b6b"}}>{"Confira a mudan\u00e7a antes de salvar."}</p>
-        <div style={{display:"grid",gap:5,marginBottom:14,fontSize:13,color:"#454253"}}>
-          <div><b>{"\u00c1rea:"}</b> {pendingAreaStatus.assignment.area}</div>
-          <div><b>{"Respons\u00e1vel:"}</b> {pendingAreaStatus.assignment.owner}</div>
-          <div><b>Status atual:</b> {pendingAreaStatus.assignment.status}</div>
-          <div><b>Novo status:</b> {pendingAreaStatus.nextStatus}</div>
+    {selected&&<div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setSelected(null)}}><div className="modal requestDetailModal">
+      <header className="requestDetailHeader">
+        <div className="requestDetailTitle">
+          <span className="requestProtocol">PROTOCOLO #{selected.protocol}</span>
+          {detailEditing && (isManager || selected.requesterId===profile?.id) ?
+            <label className="requestControlLabel">Título da solicitação
+              <input value={detailDraft?.title??selected.title} onChange={e=>setDetailDraft(current=>current?{...current,title:e.target.value}:current)} />
+            </label> :
+            <h2>{selected.title}</h2>}
+          <p>{selected.area} <span>•</span> Aberta em {new Date(selected.created+"T12:00:00").toLocaleDateString("pt-BR")}</p>
         </div>
-        <div className="modalActions" style={{marginTop:0}}>
-          <button className="secondary" onClick={()=>setPendingAreaStatus(null)}>Cancelar</button>
-          <button className="primary" onClick={()=>void updateAreaStatus(pendingAreaStatus.task,pendingAreaStatus.assignment,pendingAreaStatus.nextStatus)}>Confirmar e salvar</button>
+        <div className="requestHeaderActions">
+          {!detailEditing && (isManager || selected.requesterId===profile?.id || selected.areaAssignments.some(a=>a.ownerId===profile?.id&&selected.requesterId!==profile?.id)) &&
+            <button type="button" className="requestEditButton" onClick={()=>beginRequestEditing(selected)}><ClipboardList size={17}/> Editar solicitação</button>}
+          {detailEditing && <>
+            <button type="button" className="secondary" onClick={cancelRequestEditing} disabled={detailSaving}>Cancelar edição</button>
+            <button type="button" className="primary" onClick={()=>void saveRequestDetails(selected)} disabled={detailSaving}>{detailSaving?"Salvando...":"Salvar alterações"}</button>
+          </>}
+          <button className="iconButton" onClick={()=>setSelected(null)} aria-label="Fechar solicitação"><X size={18}/></button>
         </div>
-      </div>}
-      {pendingTaskUpdate&&pendingTaskUpdate.task.id===selected.id&&<div style={{padding:14,marginTop:14,border:"1px solid #d9c5f0",background:"#fbf8ff",borderRadius:10}}><b style={{color:"#54218a"}}>Confirmar alteração?</b><p style={{margin:"7px 0 12px",fontSize:13,color:"#5f5b6b"}}>Confira a mudança antes de salvar e fechar a solicitação.</p><div style={{display:"grid",gap:5,marginBottom:14,fontSize:13,color:"#454253"}}>{pendingTaskUpdate.patch.status&&<div><b>Status:</b> {pendingTaskUpdate.task.status} → {pendingTaskUpdate.patch.status}</div>}{pendingTaskUpdate.patch.priority&&<div><b>Prioridade:</b> {pendingTaskUpdate.task.priority} → {pendingTaskUpdate.patch.priority}</div>}{pendingTaskUpdate.patch.ownerId!==undefined&&<div><b>Responsável:</b> {pendingTaskUpdate.task.owner} → {pendingTaskUpdate.patch.ownerId?members.find(member=>member.id===pendingTaskUpdate.patch.ownerId)?.full_name||"Responsável selecionado":"Não atribuído"}</div>}</div><div className="modalActions" style={{marginTop:0}}><button className="secondary" onClick={()=>setPendingTaskUpdate(null)}>Cancelar</button><button className="primary" onClick={()=>void updateTask(pendingTaskUpdate.task,pendingTaskUpdate.patch)}>Confirmar, salvar e fechar</button></div></div>}
-      <p className="notice">O status geral é atualizado automaticamente conforme o andamento das áreas responsáveis.</p>{isManager&&<><label>Prioridade<select value={selected.priority} onChange={e=>setPendingTaskUpdate({task:selected,patch:{priority:e.target.value as Priority}})}>{(["Baixa","Média","Alta","Urgente"] as Priority[]).map(s=><option key={s}>{s}</option>)}</select></label></>}{(isManager || selected.requesterId===profile?.id)&&<div style={{marginTop:18}}>
-      {deleteConfirm ? <div style={{padding:14,border:"1px solid #fecaca",background:"#fff7f7",borderRadius:10}}>
-        <b style={{color:"#b42318"}}>Confirmar exclusão?</b>
-        <p style={{margin:"6px 0 12px",fontSize:13,color:"#667085"}}>A solicitação será retirada das listas, mas permanecerá preservada no histórico do banco de dados.</p>
-        <div className="modalActions" style={{marginTop:0}}><button className="secondary" onClick={()=>setDeleteConfirm(false)} disabled={deletingTask}>Cancelar</button><button onClick={()=>deleteTask(selected)} disabled={deletingTask} style={{background:"#b42318",color:"white",border:0,borderRadius:9,padding:"10px 16px",fontWeight:600,cursor:"pointer"}}>{deletingTask?"Excluindo...":"Confirmar exclusão"}</button></div>
-      </div> : <div className="modalActions"><button className="secondary" onClick={()=>setSelected(null)}>Fechar</button><button onClick={()=>setDeleteConfirm(true)} style={{background:"#fff",color:"#b42318",border:"1px solid #fda29b",borderRadius:9,padding:"10px 16px",fontWeight:600,cursor:"pointer"}}>Excluir solicitação</button></div>}
-    </div>}{!isManager&&selected.requesterId!==profile?.id&&<div className="modalActions"><button className="secondary" onClick={()=>setSelected(null)}>Fechar</button></div>}      <section style={{marginTop:22,padding:18,border:"1px solid #e8e3ef",borderRadius:14,background:"#fcfbfe"}}>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap",marginBottom:14}}>
-          <div style={{display:"flex",alignItems:"center",gap:10}}>
-            <span style={{width:36,height:36,display:"grid",placeItems:"center",borderRadius:11,background:"#f2eaff",color:"#7a1bd8"}}><MessageCircle size={18}/></span>
-            <div><h3 style={{margin:0,fontSize:15,color:"#292536"}}>Conversa da solicitação</h3><p style={{margin:"3px 0 0",fontSize:12,color:"#858397"}}>Mensagens entre o solicitante e os responsáveis pela demanda.</p></div>
+      </header>
+
+      <section className="requestSummaryGrid">
+        <div className="requestSummaryItem">
+          <span className="requestSummaryIcon violet"><Layers size={19}/></span>
+          <div><small>Áreas responsáveis</small><strong>{selected.areaAssignments.map(a=>a.area).join(" · ")||selected.area}</strong></div>
+        </div>
+        <div className="requestSummaryItem">
+          <span className="requestSummaryIcon violet"><CalendarDays size={19}/></span>
+          <div><small>Prazo</small>
+            {detailEditing && (isManager || selected.requesterId===profile?.id) ?
+              <input type="date" value={detailDraft?.due??selected.due} onChange={e=>setDetailDraft(current=>current?{...current,due:e.target.value}:current)} /> :
+              <strong>{new Date(selected.due+"T12:00:00").toLocaleDateString("pt-BR")}</strong>}
           </div>
-          <span style={{fontSize:11,fontWeight:700,color:(unreadCounts[selected.id]||0)>0?"#7020c5":"#667085",background:(unreadCounts[selected.id]||0)>0?"#f2e8ff":"#f1f1f5",padding:"6px 10px",borderRadius:20}}>{unreadCounts[selected.id]||0} não lida(s)</span>
         </div>
-        <div style={{display:"grid",gap:10,maxHeight:320,overflowY:"auto",padding:"4px 2px 10px"}}>
-          {commentsLoading&&!requestComments.length?<div className="emptyTable">Carregando conversa...</div>:!requestComments.length?<div className="emptyTable">Nenhuma mensagem ainda. Use o campo abaixo para iniciar a conversa.</div>:pageItems("comments",requestComments).map(message=>{
-            const mine=message.author_id===profile?.id;
-            return <div key={message.id} style={{display:"flex",justifyContent:mine?"flex-end":"flex-start"}}>
-              <div style={{maxWidth:"88%",minWidth:150,padding:"10px 12px",borderRadius:12,border:mine?"1px solid #e2d2f4":"1px solid #e7e8ef",background:mine?"#f5edff":"#fff"}}>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:14,marginBottom:6}}>
-                  <b style={{fontSize:12,color:mine?"#7020c5":"#333244"}}>{mine?"Você":message.author_name}</b>
-                  <small style={{fontSize:10,color:"#858397",whiteSpace:"nowrap"}}>{new Date(message.created_at).toLocaleString("pt-BR")}</small>
-                </div>
-                <p style={{margin:0,fontSize:13,lineHeight:1.55,color:"#454253",whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{message.body}</p>
-              </div>
-            </div>;
-          })}
-        </div><Pagination {...paginationProps("comments",requestComments.length)}/>
-        {commentsError&&<div className="errorBox" style={{marginTop:10}}>{commentsError}</div>}
-        <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) auto",alignItems:"end",gap:10,marginTop:12}}>
-          <label style={{display:"grid",gap:6,fontSize:12,fontWeight:600,color:"#565568"}}>Nova mensagem
-            <textarea rows={3} maxLength={5000} value={commentDraft} onChange={e=>setCommentDraft(e.target.value)} placeholder="Escreva uma mensagem para os participantes desta solicitação..." style={{width:"100%",boxSizing:"border-box",resize:"vertical",padding:"11px 12px",border:"1px solid #dedbe6",borderRadius:10,fontFamily:"inherit",fontSize:13,outlineColor:"#9b5cdb",background:"#fff"}}/>
-            <small style={{fontWeight:400,color:"#858397"}}>{commentDraft.length}/5000 caracteres</small>
-          </label>
-          <button className="primary" type="button" onClick={sendRequestComment} disabled={commentsSending||!commentDraft.trim()||commentDraft.trim().length>5000} style={{height:42,whiteSpace:"nowrap"}}>{commentsSending?"Enviando...":<><Send size={15}/> Enviar</>}</button>
+        <div className="requestSummaryItem">
+          <span className="requestSummaryIcon amber"><AlertTriangle size={19}/></span>
+          <div><small>Prioridade</small>
+            {detailEditing && isManager ?
+              <select value={detailDraft?.priority??selected.priority} onChange={e=>setDetailDraft(current=>current?{...current,priority:e.target.value as Priority}:current)}>
+                {(["Baixa","Média","Alta","Urgente"] as Priority[]).map(p=><option key={p}>{p}</option>)}
+              </select> :
+              <strong className={`requestPriorityValue priority${selected.priority.replace(/\s/g,"")}`}>{selected.priority}</strong>}
+          </div>
+        </div>
+        <div className="requestSummaryItem">
+          <span className="requestSummaryIcon green"><Activity size={19}/></span>
+          <div><small>Status geral</small><StatusBadge status={selected.status}/></div>
         </div>
       </section>
 
-      {dataError&&<div className="errorBox" style={{marginTop:12}}>{dataError}</div>}
-      </div></div>}
-      </>
-    }
-  >
-<div className="content">
-        {dataError&&<div className="errorBanner"><span>{dataError}</span><button onClick={()=>session?.user&&loadData(session.user)}>Tentar novamente</button></div>}
+      <section className="requestDescription">
+        <div className="requestSectionHeading">
+          <span className="requestSectionIcon"><ClipboardList size={20}/></span>
+          <div><h3>Descrição da solicitação</h3><p>Detalhamento do que precisa ser realizado</p></div>
+        </div>
+        {detailEditing && (isManager || selected.requesterId===profile?.id) ?
+          <textarea rows={4} value={detailDraft?.description??selected.description} onChange={e=>setDetailDraft(current=>current?{...current,description:e.target.value}:current)} /> :
+          <div className="requestDescriptionContent">{selected.description?.trim()||"Nenhuma descrição adicional foi informada."}</div>}
+      </section>
+
+      <section className="requestAreaSection">
+        <div className="requestSectionHeading">
+          <span className="requestSectionIcon"><Users size={20}/></span>
+          <div><h3>Acompanhamento por área</h3><p>Responsáveis e andamento de cada área envolvida</p></div>
+          <span className="requestAreaCount">{selected.areaAssignments.length} {selected.areaAssignments.length===1?"área":"áreas"}</span>
+        </div>
+        <div className="requestAreaList">
+          {selected.areaAssignments.map(assignment=>{
+            const draftAssignment=detailDraft?.areaAssignments.find(item=>item.areaId===assignment.areaId)||assignment;
+            const canEditAreaStatus=isManager||(assignment.ownerId===profile?.id&&selected.requesterId!==profile?.id);
+            return <article className="requestAreaCard" key={assignment.areaId}>
+              <div className="requestAreaCardHead">
+                <div className="requestAreaName">
+                  <span className="requestAreaIcon"><Layers size={17}/></span>
+                  <strong>{assignment.area}</strong>
+                  {assignment.isPrimary&&<span className="requestPrimaryTag">Área principal</span>}
+                </div>
+                <StatusBadge status={assignment.status}/>
+              </div>
+              <div className="requestAreaDetails">
+                <div className="requestAreaDetailRow">
+                  <span>Responsável</span>
+                  <strong>{draftAssignment.owner||"Não atribuído"}</strong>
+                </div>
+                <div className="requestAreaDetailRow">
+                  <span>Responsável atribuído</span>
+                  {detailEditing&&isManager ?
+                    <select className="scheduleSelect" value={draftAssignment.ownerId||""} onChange={e=>{
+                      const selectedMember=(detailMembersByArea[assignment.areaId]||[]).find(member=>member.profile_id===e.target.value);
+                      setDetailDraft(current=>current?{...current,areaAssignments:current.areaAssignments.map(item=>item.areaId===assignment.areaId?{...item,ownerId:e.target.value,owner:selectedMember?.full_name||"Não atribuído"}:item)}:current);
+                    }}>
+                      {(detailMembersByArea[assignment.areaId]||[]).map(member=><option key={member.profile_id} value={member.profile_id}>{member.full_name}</option>)}
+                    </select> :
+                    <strong className="requestAssignedPerson">{draftAssignment.owner||"Não atribuído"}</strong>}
+                </div>
+                <div className="requestAreaDetailRow">
+                  <span>Status desta área</span>
+                  {detailEditing&&canEditAreaStatus ?
+                    <select className="scheduleSelect" value={draftAssignment.status} onChange={e=>setDetailDraft(current=>current?{...current,areaAssignments:current.areaAssignments.map(item=>item.areaId===assignment.areaId?{...item,status:e.target.value as Status}:item)}:current)}>
+                      {(["Recebida","Em análise","Aguardando aprovação","Em execução","Concluída","Cancelada"] as Status[]).map(s=><option key={s}>{s}</option>)}
+                    </select> :
+                    <StatusBadge status={assignment.status}/>}
+                </div>
+              </div>
+            </article>;
+          })}
+        </div>
+        <div className="requestStatusNotice"><span><CheckCircle2 size={18}/></span>O status geral é atualizado automaticamente conforme o andamento das áreas responsáveis.</div>
+      </section>
+
+      {(isManager || selected.requesterId===profile?.id) &&
+        <section className="requestDeleteSection">
+          {deleteConfirm ?
+            <div className="requestDeleteConfirm">
+              <div><strong>Confirmar exclusão?</strong><p>A solicitação será retirada das listas, mas permanecerá preservada no histórico do banco de dados.</p></div>
+              <div className="modalActions">
+                <button className="secondary" onClick={()=>setDeleteConfirm(false)} disabled={deletingTask}>Cancelar</button>
+                <button className="requestDeleteButton" onClick={()=>deleteTask(selected)} disabled={deletingTask}>{deletingTask?"Excluindo...":"Confirmar exclusão"}</button>
+              </div>
+            </div> :
+            <div className="requestFooterActions">
+              <button className="secondary" onClick={()=>setSelected(null)}>Fechar</button>
+              <button className="requestDeleteButton" onClick={()=>setDeleteConfirm(true)}>Excluir solicitação</button>
+            </div>}
+        </section>}
+      {!isManager&&selected.requesterId!==profile?.id&&
+        <div className="requestFooterActions"><button className="secondary" onClick={()=>setSelected(null)}>Fechar</button></div>}
+
+      <section className="requestConversation">
+        <div className="requestSectionHeading requestConversationHeading">
+          <span className="requestSectionIcon"><MessageCircle size={20}/></span>
+          <div><h3>Conversa da solicitação</h3><p>Mensagens entre o solicitante e os responsáveis pela demanda.</p></div>
+          <span className="requestUnreadCount">{unreadCounts[selected.id]||0} não lida(s)</span>
+        </div>
+        <div className="requestConversationMessages">
+          {commentsLoading&&!requestComments.length ?
+            <div className="emptyTable">Carregando conversa...</div> :
+            !requestComments.length ?
+              <div className="requestConversationEmpty">
+                <span><MessageCircle size={34}/></span>
+                <strong>Nenhuma mensagem ainda.</strong>
+                <p>Use o campo abaixo para iniciar a conversa.</p>
+              </div> :
+              pageItems("comments",requestComments).map(message=>{
+                const mine=message.author_id===profile?.id;
+                return <div key={message.id} className={`requestMessageRow ${mine?"mine":"theirs"}`}>
+                  <div className="requestMessageBubble">
+                    <div className="requestMessageMeta">
+                      <b>{mine?"Você":message.author_name}</b>
+                      <small>{new Date(message.created_at).toLocaleString("pt-BR")}</small>
+                    </div>
+                    <p>{message.body}</p>
+                  </div>
+                </div>;
+              })}
+        </div>
+        <Pagination {...paginationProps("comments",requestComments.length)}/>
+        {commentsError&&<div className="errorBox" style={{marginTop:10}}>{commentsError}</div>}
+        <div className="requestMessageComposer">
+          <label>
+            <span>Nova mensagem</span>
+            <textarea rows={2} maxLength={5000} value={commentDraft} onChange={e=>setCommentDraft(e.target.value)} placeholder="Digite uma mensagem..." />
+            <small>{commentDraft.length}/5000 caracteres</small>
+          </label>
+          <button className="primary" type="button" onClick={sendRequestComment} disabled={commentsSending||!commentDraft.trim()||commentDraft.trim().length>5000}>{commentsSending?"Enviando...":<><Send size={17}/> Enviar</>}</button>
+        </div>
+      </section>
+
+      {dataError&&<div className="errorBox requestDetailError">{dataError}</div>}
+    </div></div>}
+      </>}>
+    <div>
+      {dataError&&<div className="errorBanner"><span>{dataError}</span><button onClick={()=>session?.user&&loadData(session.user)}>Tentar novamente</button></div>}
         {commentNotice&&<div className="notice" style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginBottom:16}}><span style={{display:"flex",alignItems:"center",gap:8}}><Bell size={16}/>{commentNotice}</span><button className="textButton" onClick={()=>setCommentNotice("")}>Fechar</button></div>}
         <style>{`.dashFilterNote{margin:12px 0 0;padding:10px 12px;border-radius:9px;background:#fff9eb;color:#8a641c;font-size:11px;line-height:1.5}`}</style>
         {active==="Dashboard" && <Dashboard
@@ -1784,5 +1962,6 @@ export default function Home() {
       </div>
   </MainLayout>;
 }
+
 
 
