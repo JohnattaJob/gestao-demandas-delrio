@@ -1588,8 +1588,14 @@ td:first-child b {
   }
 }
 
-/* Acompanhamento por área — mesmo destaque visual da descrição */
-.requestDetailModal .requestAreaSection {
+/* Acompanhamento por área — destaque aplicado individualmente aos cartões */
+.requestDetailModal .requestAreaCard {
   background: #fcfaff;
+  border: 1px solid #e5d9f2;
   border-left: 3px solid #9b5cdb;
+}
+
+.requestDetailModal .requestAreaCard:hover {
+  border-color: #d5c1e9;
+  border-left-color: #9b5cdb;
 }
